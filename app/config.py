@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     max_llm_concurrency: int = Field(default=4, ge=1, le=32, description="Max concurrent LLM calls")
     max_file_size_mb: int = Field(default=50, ge=1, le=500, description="Max upload file size in MB")
 
+    embedding_batch_size: int = Field(default=32, ge=1, le=256, description="Batch size for embedding generation")
+    ocr_provider: str = Field(default="pymupdf_ocr", description="OCR provider name")
+    low_quality_threshold: float = Field(default=0.30, ge=0.0, le=1.0, description="Threshold for low text density")
+
     # ── Application ───────────────────────────────────────────────
     log_level: str = Field(default="INFO", description="Logging level")
     app_host: str = Field(default="0.0.0.0", description="Host to bind")
@@ -49,6 +53,7 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": False,
+        "extra": "ignore",
     }
 
     @property

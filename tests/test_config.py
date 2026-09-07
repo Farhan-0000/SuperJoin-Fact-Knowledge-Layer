@@ -9,7 +9,7 @@ from app.config import Settings
 
 def test_default_settings():
     """Settings should load with sensible defaults."""
-    s = Settings(openai_api_key="sk-test")
+    s = Settings(openai_api_key="sk-test", _env_file=None)
     assert s.extraction_model == "gpt-4o"
     assert s.max_llm_concurrency == 4
     assert s.max_file_size_mb == 50
