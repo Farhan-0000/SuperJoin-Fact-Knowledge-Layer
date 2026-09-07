@@ -111,15 +111,16 @@ class LocalJobRunner:
     ) -> None:
         """Asynchronously execute pipeline stages for the given document IDs."""
         logger.info("Starting pipeline execution for job %s (mode=%s, docs=%s)", job_id, mode, document_ids)
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         self._update_job(
             job_id,
             status=JobStatus.RUNNING.value,
             started_at=now_str,
-            stage="initializing",
+            stage="chunking",
             progress=0.05,
         )
 
+        current_stage_name = "chunking"
         try:
             total_steps = len(document_ids) * 3 + 2  # chunking, extraction, normalization per doc + candidates + relationships
             completed_steps = 0
@@ -127,6 +128,7 @@ class LocalJobRunner:
             # ── 1. Document-Level Stages ──────────────────────────────
             for doc_idx, doc_id in enumerate(document_ids, 1):
                 # A. Chunking
+                current_stage_name = "chunking"
                 self._update_job(
                     job_id,
                     stage="chunking",
@@ -139,6 +141,7 @@ class LocalJobRunner:
                 completed_steps += 1
 
                 # B. Fact Extraction
+                current_stage_name = "fact_extraction"
                 self._update_job(
                     job_id,
                     stage="fact_extraction",
@@ -151,6 +154,7 @@ class LocalJobRunner:
                 completed_steps += 1
 
                 # C. Normalization & Deduplication
+                current_stage_name = "normalization"
                 self._update_job(
                     job_id,
                     stage="normalization",
@@ -164,6 +168,7 @@ class LocalJobRunner:
 
             # ── 2. Cross-Document Matching Stages ─────────────────────
             # D. Candidate Generation
+            current_stage_name = "candidate_generation"
             self._update_job(
                 job_id,
                 stage="candidate_generation",
@@ -176,6 +181,7 @@ class LocalJobRunner:
             completed_steps += 1
 
             # E. Relationship Reasoning
+            current_stage_name = "relationship_reasoning"
             self._update_job(
                 job_id,
                 stage="relationship_reasoning",
@@ -188,7 +194,7 @@ class LocalJobRunner:
             completed_steps += 1
 
             # ── 3. Completed ──────────────────────────────────────────
-            completed_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            completed_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             self._update_job(
                 job_id,
                 status=JobStatus.COMPLETED.value,
@@ -201,13 +207,13 @@ class LocalJobRunner:
             logger.info("Job %s completed successfully", job_id)
 
         except Exception as e:
-            logger.exception("Job %s failed with error: %s", job_id, e)
+            logger.exception("Job %s failed at stage '%s' with error: %s", job_id, current_stage_name, e)
             self._update_job(
                 job_id,
                 status=JobStatus.FAILED.value,
-                stage="failed",
+                stage=current_stage_name,
                 error_message=str(e),
-                completed_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                completed_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             )
 
     def start_job(
@@ -219,14 +225,15 @@ class LocalJobRunner:
         """Enqueue a new pipeline job and launch async execution."""
         jid = job_id or f"job_{uuid.uuid4().hex[:12]}"
         total_steps = len(document_ids) * 3 + 2
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
         conn = get_connection(self.db_path)
         try:
             conn.execute(
                 """INSERT OR REPLACE INTO jobs (
                     id, job_type, document_ids_json, status, progress,
-                    current_stage, total_items, completed_items
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    current_stage, total_items, completed_items, created_at, started_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     jid,
                     mode,
@@ -236,6 +243,8 @@ class LocalJobRunner:
                     "queued",
                     total_steps,
                     0,
+                    now_str,
+                    now_str,
                 ),
             )
             conn.commit()

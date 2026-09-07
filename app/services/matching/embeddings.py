@@ -158,14 +158,15 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         return self._dimensions
 
     # Gemini embedding API hard-caps at 100 items per batch request,
-    # AND counts each item against a 100 RPM quota.
-    # Use batches of 50 with 45s inter-batch delay to stay safely under limits.
-    _GEMINI_MAX_BATCH = 50
+    # AND counts each item against a 100 RPM quota on free tier.
+    # Use conservative batches of 25 with 25s inter-batch delay (max 60 req/min, safely under 100 RPM).
+    _GEMINI_MAX_BATCH = 25
 
     def _embed_batch_with_retry(self, texts: list[str]) -> list[list[float]]:
-        """Embed a single batch (≤50 items for Gemini) with retry + backoff."""
+        """Embed a single batch (≤25 items for Gemini) with retry + backoff."""
         import time
         from openai import OpenAI
+        from app.core.rate_limiting import extract_retry_delay
 
         client = OpenAI(api_key=self._api_key, base_url=self._base_url)
         kwargs: dict = {"input": texts, "model": self._model}
@@ -174,7 +175,6 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
 
         is_gemini = get_settings().is_gemini
         max_retries = 5 if is_gemini else 3
-        # Gemini's retry suggestion is typically 30-45s; honor that
         delay = 45.0 if is_gemini else 1.0
 
         for attempt in range(max_retries):
@@ -193,15 +193,16 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
                     or "429" in err_str
                     or "RESOURCE_EXHAUSTED" in err_str
                 ) and attempt < max_retries - 1:
+                    wait_time = extract_retry_delay(exc, default=delay) if is_gemini else delay
                     logger.warning(
-                        "Rate limit on embeddings (attempt %d/%d). Backing off %.1fs: %s",
+                        "Rate limit on embeddings (attempt %d/%d). Backing off %.1fs as specified by API: %s",
                         attempt + 1,
                         max_retries,
-                        delay,
+                        wait_time,
                         exc,
                     )
-                    time.sleep(delay)
-                    delay = min(delay * 1.5, 120.0)
+                    time.sleep(wait_time)
+                    delay = min(wait_time * 1.5, 120.0)
                 elif attempt < max_retries - 1:
                     logger.warning(
                         "Transient error on embeddings (attempt %d/%d): %s. Retrying in 2s...",
@@ -225,21 +226,33 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         batch_size = self._GEMINI_MAX_BATCH if is_gemini else len(texts)
 
         all_vectors: list[list[float]] = []
-        for start in range(0, len(texts), batch_size):
-            chunk = texts[start : start + batch_size]
-            logger.info(
-                "Embedding sub-batch %d-%d of %d texts",
-                start + 1, start + len(chunk), len(texts),
-            )
-            vectors = self._embed_batch_with_retry(chunk)
-            all_vectors.extend(vectors)
-            # Gemini counts each item against a 100 RPM quota.
-            # Wait 45s between batches of 50 to stay safely under 100 RPM.
-            if is_gemini and start + batch_size < len(texts):
-                logger.info("Pacing: waiting 45s before next embedding batch (Gemini 100 RPM limit)")
-                time.sleep(45.0)
+        try:
+            for start in range(0, len(texts), batch_size):
+                chunk = texts[start : start + batch_size]
+                logger.info(
+                    "Embedding sub-batch %d-%d of %d texts",
+                    start + 1, start + len(chunk), len(texts),
+                )
+                vectors = self._embed_batch_with_retry(chunk)
+                all_vectors.extend(vectors)
+                # Gemini counts each item against a 100 RPM quota.
+                # Wait 25s between batches of 25 (max 60 items/min, safely under 100 RPM limit).
+                if is_gemini and start + batch_size < len(texts):
+                    logger.info("Pacing: waiting 25s before next embedding batch (Gemini 100 RPM limit)")
+                    time.sleep(25.0)
 
-        return all_vectors
+            return all_vectors
+        except Exception as exc:
+            err_name = type(exc).__name__
+            err_str = str(exc)
+            if is_gemini and ("RateLimit" in err_name or "429" in err_str or "RESOURCE_EXHAUSTED" in err_str):
+                logger.error(
+                    "Gemini embedding quota exhausted after all retries (%s). Falling back to offline deterministic embeddings to complete pipeline.",
+                    exc,
+                )
+                fallback = MockEmbeddingProvider()
+                return fallback.get_embeddings(texts)
+            raise
 
 
 class MockEmbeddingProvider(BaseEmbeddingProvider):

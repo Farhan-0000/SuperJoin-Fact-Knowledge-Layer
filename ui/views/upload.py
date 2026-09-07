@@ -74,6 +74,8 @@ def render_upload_view() -> None:
             st.session_state["active_nav"] = "Processing"
             st.rerun()
 
+    from app.core.rate_limiting import format_local_timestamp
+
     # Render Document Table
     table_data = []
     for d in docs:
@@ -83,7 +85,7 @@ def render_upload_view() -> None:
             "Pages": d["page_count"],
             "Status": d["status"].upper(),
             "SHA-256": d["sha256"][:12] + "...",
-            "Uploaded": d.get("created_at", "")[:19].replace("T", " "),
+            "Uploaded": format_local_timestamp(d.get("created_at")),
         })
 
     st.dataframe(table_data, use_container_width=True)

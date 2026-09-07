@@ -99,7 +99,9 @@ def render_failures_view() -> None:
         if not failed_jobs:
             st.success("✓ No failed processing jobs in system history.")
         else:
+            from app.core.rate_limiting import format_local_timestamp
+
             for fj in failed_jobs:
                 st.error(f"**Job ID:** `{fj.get('id')}` &bull; Stage: `{fj.get('current_stage')}`")
                 st.code(fj.get("error_message") or "Unknown error", language="text")
-                st.caption(f"Created: {fj.get('created_at')}")
+                st.caption(f"Created: {format_local_timestamp(fj.get('created_at'))}")

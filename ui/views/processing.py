@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from app.core.rate_limiting import compute_duration, format_local_timestamp
 from ui.data_service import get_data_service
 
 
@@ -48,6 +49,8 @@ def render_processing_view() -> None:
     progress_val = float(current_job.get("progress", 0.0))
     completed_items = current_job.get("completed_items", 0)
     total_items = current_job.get("total_items", 0)
+    started_at_raw = current_job.get("started_at") or current_job.get("created_at")
+    completed_at_raw = current_job.get("completed_at")
 
     with col_stat:
         if status_val == "completed":
@@ -65,6 +68,15 @@ def render_processing_view() -> None:
     with col_items:
         st.markdown(f"**Items Completed**: `{completed_items} / {total_items}`")
 
+    # Time details for active job
+    c_start, c_comp, c_dur = st.columns(3)
+    with c_start:
+        st.caption(f"**Started**: {format_local_timestamp(started_at_raw) or '—'}")
+    with c_comp:
+        st.caption(f"**Completed**: {format_local_timestamp(completed_at_raw) or '—'}")
+    with c_dur:
+        st.caption(f"**Duration**: {compute_duration(started_at_raw, completed_at_raw)}")
+
     # Progress Bar
     clamped_progress = max(0.0, min(1.0, progress_val))
     st.progress(clamped_progress)
@@ -80,16 +92,39 @@ def render_processing_view() -> None:
         ("completed", "6. Completed"),
     ]
 
+    stage_order = {
+        "chunking": 0,
+        "fact_extraction": 1,
+        "normalization": 2,
+        "candidate_generation": 3,
+        "relationship_reasoning": 4,
+        "completed": 5,
+    }
+
     cols = st.columns(len(pipeline_stages))
+    failed_stage_idx = stage_order.get(stage_val, 0)
+    active_stage_idx = stage_order.get(stage_val, 0)
+
     for idx, (s_key, s_label) in enumerate(pipeline_stages):
         with cols[idx]:
             if status_val == "completed":
                 st.markdown(f"🟢 **{s_label}**")
-            elif s_key == stage_val:
-                st.markdown(f"🔵 **{s_label}** *(active)*")
-            elif current_job.get("completed_items", 0) > idx:
-                st.markdown(f"✅ **{s_label}**")
+            elif status_val == "failed":
+                if idx < failed_stage_idx:
+                    st.markdown(f"✅ **{s_label}**")
+                elif idx == failed_stage_idx:
+                    st.markdown(f"❌ **{s_label}** *(failed)*")
+                else:
+                    st.markdown(f"⚪ {s_label}")
+            elif status_val == "running":
+                if idx < active_stage_idx:
+                    st.markdown(f"✅ **{s_label}**")
+                elif idx == active_stage_idx:
+                    st.markdown(f"🔵 **{s_label}** *(active)*")
+                else:
+                    st.markdown(f"⚪ {s_label}")
             else:
+                # Queued / idle
                 st.markdown(f"⚪ {s_label}")
 
     if status_val == "completed":
@@ -116,6 +151,8 @@ def render_processing_view() -> None:
     st.subheader("Job History")
     hist_table = []
     for j in jobs:
+        s_raw = j.get("started_at") or j.get("created_at")
+        c_raw = j.get("completed_at")
         hist_table.append({
             "Job ID": j["id"],
             "Type": j["job_type"].upper(),
@@ -123,8 +160,9 @@ def render_processing_view() -> None:
             "Status": j["status"].upper(),
             "Stage": j.get("current_stage", ""),
             "Progress": f"{int(j.get('progress', 0.0) * 100)}%",
-            "Started": (j.get("started_at") or "")[:19].replace("T", " "),
-            "Completed": (j.get("completed_at") or "")[:19].replace("T", " "),
+            "Started": format_local_timestamp(s_raw),
+            "Completed": format_local_timestamp(c_raw),
+            "Duration": compute_duration(s_raw, c_raw),
         })
 
     st.dataframe(hist_table, use_container_width=True)

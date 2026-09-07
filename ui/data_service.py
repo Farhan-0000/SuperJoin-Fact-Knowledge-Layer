@@ -634,8 +634,8 @@ class UIDataService:
             # 6. Completed Job record
             conn.execute(
                 """INSERT OR REPLACE INTO jobs (
-                    id, job_type, document_ids_json, status, progress, current_stage, total_items, completed_items, created_at, completed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    id, job_type, document_ids_json, status, progress, current_stage, total_items, completed_items, created_at, started_at, completed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     "job_demo_completed",
                     "full",
@@ -645,6 +645,7 @@ class UIDataService:
                     "completed",
                     11,
                     11,
+                    now,
                     now,
                     now,
                 ),

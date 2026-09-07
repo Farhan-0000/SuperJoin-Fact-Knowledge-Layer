@@ -331,7 +331,12 @@ class ExtractionService:
                     or "429" in str(exc)
                     or "RESOURCE_EXHAUSTED" in str(exc)
                 )
-                retry_wait = max(delay, 5.0 * (attempt + 1)) if is_rate_limit else delay
+                from app.core.rate_limiting import extract_retry_delay
+
+                if is_rate_limit and get_settings().is_gemini:
+                    retry_wait = extract_retry_delay(exc, default=45.0)
+                else:
+                    retry_wait = max(delay, 5.0 * (attempt + 1)) if is_rate_limit else delay
                 logger.warning(
                     "LLM call transient failure (%s, attempt %d/%d): %s. Retrying in %.2fs...",
                     err_name,

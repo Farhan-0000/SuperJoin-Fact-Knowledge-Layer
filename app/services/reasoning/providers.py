@@ -44,6 +44,8 @@ class OpenAIRelationshipProvider(BaseRelationshipProvider):
         max_retries = 3
         delay = 5.0 if is_gemini else 1.0
 
+        from app.core.rate_limiting import extract_retry_delay
+
         for attempt in range(max_retries):
             try:
                 if is_gemini:
@@ -64,15 +66,16 @@ class OpenAIRelationshipProvider(BaseRelationshipProvider):
                     or "429" in err_str
                     or "RESOURCE_EXHAUSTED" in err_str
                 ) and attempt < max_retries - 1:
+                    wait_time = extract_retry_delay(exc, default=delay) if is_gemini else delay
                     logger.warning(
                         "Rate limit in relationship reasoning (attempt %d/%d). Backing off %.1fs: %s",
                         attempt + 1,
                         max_retries,
-                        delay,
+                        wait_time,
                         exc,
                     )
-                    time.sleep(delay)
-                    delay *= 2.0
+                    time.sleep(wait_time)
+                    delay = min(wait_time * 1.5, 120.0)
                 elif attempt < max_retries - 1:
                     logger.warning(
                         "Transient error in relationship reasoning (attempt %d/%d): %s. Retrying in 1s...",
