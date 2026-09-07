@@ -147,10 +147,21 @@ class DeterministicComparator:
                 context_comparison=context,
             ), context
 
+        is_curr_a = bool(curr_a or fact_a.value_type == ValueType.CURRENCY)
+        is_curr_b = bool(curr_b or fact_b.value_type == ValueType.CURRENCY)
+
         currency_match = True
         if curr_a and curr_b and curr_a != curr_b:
             currency_match = False
         context["currency_match"] = currency_match
+
+        # Explicit compatibility for currency:
+        # If either fact represents a currency/monetary value, both must specify currency and match.
+        if is_curr_a or is_curr_b:
+            currency_explicitly_compatible = bool(curr_a and curr_b and curr_a == curr_b)
+        else:
+            currency_explicitly_compatible = (curr_a == curr_b)
+        context["currency_explicitly_compatible"] = currency_explicitly_compatible
 
         unit_match = True
         if unit_a and unit_b and unit_a != unit_b:
@@ -198,6 +209,12 @@ class DeterministicComparator:
         context["scope_b"] = fact_b.scope
         context["scope_match"] = scope_match
 
+        # Explicit compatibility for scope:
+        # Both must have identical scope (including both unspecified, or both "consolidated", etc.).
+        # Asymmetric or differing scope means they are not explicitly compatible.
+        scope_explicitly_compatible = (scope_a == scope_b)
+        context["scope_explicitly_compatible"] = scope_explicitly_compatible
+
         geo_a = (fact_a.geography or "").strip().lower()
         geo_b = (fact_b.geography or "").strip().lower()
         geo_match = True
@@ -206,6 +223,12 @@ class DeterministicComparator:
         context["geography_a"] = fact_a.geography
         context["geography_b"] = fact_b.geography
         context["geography_match"] = geo_match
+
+        # Explicit compatibility for geography:
+        # Both must have identical geography (including both unspecified, or both "global", etc.).
+        # Asymmetric or differing geography means they are not explicitly compatible.
+        geo_explicitly_compatible = (geo_a == geo_b)
+        context["geography_explicitly_compatible"] = geo_explicitly_compatible
 
         # ── 6. Qualifiers Dimension ─────────────────────────────────────
         qual_a = set(json.loads(fact_a.qualifiers_json)) if fact_a.qualifiers_json else set()
@@ -251,7 +274,11 @@ class DeterministicComparator:
                     explanation=f"Both sources corroborate that {context['entity_a']} {fact_a.predicate} was {fact_a.value_text} for {period_desc}.",
                     context_comparison=context,
                 ), context
-            else:
+            elif (
+                currency_explicitly_compatible
+                and scope_explicitly_compatible
+                and geo_explicitly_compatible
+            ):
                 # Direct Contradiction! Same entity, predicate, units, period, scope, geo, but differing values!
                 return True, LLMRelationshipClassification(
                     relationship_type=RelationshipType.CONTRADICTS,
@@ -259,7 +286,7 @@ class DeterministicComparator:
                     primary_dimension=PrimaryDimension.VALUE,
                     explanation=(
                         f"Direct contradiction on {context['entity_a']} {fact_a.predicate} for {t_text_a or year_a}: "
-                        f"'{fact_a.value_text}' vs '{fact_b.value_text}' under identical scope and period."
+                        f"'{fact_a.value_text}' vs '{fact_b.value_text}' under identical scope, geography, currency, and period."
                     ),
                     context_comparison=context,
                 ), context
@@ -280,32 +307,48 @@ class DeterministicComparator:
                 ), context
 
             # Scope difference reconciles values
-            if not scope_match and scope_a and scope_b:
+            if (not scope_match or not scope_explicitly_compatible) and (scope_a or scope_b):
                 return True, LLMRelationshipClassification(
                     relationship_type=RelationshipType.RECONCILES,
                     confidence=0.90,
                     primary_dimension=PrimaryDimension.SCOPE,
-                    explanation=f"Values differ due to reporting scope: '{fact_a.scope}' vs '{fact_b.scope}'.",
+                    explanation=(
+                        f"Values differ due to reporting scope: "
+                        f"'{fact_a.scope or 'unspecified'}' vs '{fact_b.scope or 'unspecified'}'."
+                    ),
                     context_comparison=context,
                 ), context
 
             # Geography difference reconciles values
-            if not geo_match and geo_a and geo_b:
+            if (not geo_match or not geo_explicitly_compatible) and (geo_a or geo_b):
                 return True, LLMRelationshipClassification(
                     relationship_type=RelationshipType.RECONCILES,
                     confidence=0.90,
                     primary_dimension=PrimaryDimension.GEOGRAPHY,
-                    explanation=f"Values differ due to geographic coverage: '{fact_a.geography}' vs '{fact_b.geography}'.",
+                    explanation=(
+                        f"Values differ due to geographic coverage: "
+                        f"'{fact_a.geography or 'unspecified'}' vs '{fact_b.geography or 'unspecified'}'."
+                    ),
                     context_comparison=context,
                 ), context
 
-            # Currency / Unit difference reconciles values
-            if not currency_match and curr_a and curr_b:
+            # Currency difference reconciles values
+            if (not currency_match or not currency_explicitly_compatible) and (curr_a or curr_b):
                 return True, LLMRelationshipClassification(
                     relationship_type=RelationshipType.RECONCILES,
                     confidence=0.90,
                     primary_dimension=PrimaryDimension.UNIT,
-                    explanation=f"Values differ due to currency difference: {curr_a} vs {curr_b}.",
+                    explanation=f"Values differ due to currency difference: {curr_a or 'unspecified'} vs {curr_b or 'unspecified'}.",
+                    context_comparison=context,
+                ), context
+
+            # Unit difference reconciles values
+            if not unit_match and unit_a and unit_b and unit_a != unit_b:
+                return True, LLMRelationshipClassification(
+                    relationship_type=RelationshipType.RECONCILES,
+                    confidence=0.90,
+                    primary_dimension=PrimaryDimension.UNIT,
+                    explanation=f"Values differ due to reporting unit difference: {unit_a} vs {unit_b}.",
                     context_comparison=context,
                 ), context
 

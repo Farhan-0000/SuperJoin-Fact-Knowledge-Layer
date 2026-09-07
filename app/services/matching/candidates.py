@@ -285,8 +285,13 @@ class CandidateGenerator:
         - Retain only if score >= min_score.
         - Do NOT call relationship LLM.
         """
-        # 1. Exclude same fact
+        # 1. Exclude same fact or rejected facts that failed verification
         if fact_a.id == fact_b.id:
+            return None
+        if (
+            fact_a.validation_status == ValidationStatus.REJECTED
+            or fact_b.validation_status == ValidationStatus.REJECTED
+        ):
             return None
 
         # 2. Reject clearly incompatible entity types & check entity similarity
@@ -401,12 +406,12 @@ class CandidateGenerator:
                 e.id: e.canonical_name for e in entities_by_id.values()
             }
 
-            # 2. Load facts
-            query = "SELECT * FROM facts"
+            # 2. Load facts (strictly excluding rejected facts)
+            query = "SELECT * FROM facts WHERE validation_status != 'rejected'"
             params: list = []
             if document_id and not cross_document_only:
                 # If specific document requested and not cross-doc only, load facts for this doc
-                query += " WHERE document_id = ?"
+                query += " AND document_id = ?"
                 params.append(document_id)
 
             fact_rows = conn.execute(query, params).fetchall()

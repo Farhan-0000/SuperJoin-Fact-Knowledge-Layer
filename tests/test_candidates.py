@@ -17,6 +17,7 @@ from app.models.schemas import (
     EntityType,
     FactSchema,
     TimeGranularity,
+    ValidationStatus,
     ValueType,
 )
 from app.services.matching.candidates import (
@@ -651,4 +652,76 @@ def test_candidates_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys:
     captured = capsys.readouterr().out
     assert "Generated 1 candidate pairs" in captured
     assert "Amazon" in captured or "Score:" in captured
+
+
+def test_filter_rejected_facts_in_evaluate_pair():
+    """CandidateGenerator.evaluate_pair must reject facts with validation_status == REJECTED."""
+    generator = CandidateGenerator(min_score=0.4)
+    fact_valid = FactSchema(
+        id="f-valid",
+        document_id="doc-1",
+        chunk_id="c-1",
+        subject="Microsoft",
+        predicate="revenue",
+        value_text="$200 billion",
+        value_type=ValueType.CURRENCY,
+        currency="USD",
+        time_text="2023",
+        source_quote="Valid quote",
+        source_page_start=1,
+        source_page_end=1,
+        validation_status=ValidationStatus.VALIDATED,
+    )
+    fact_rejected = FactSchema(
+        id="f-rejected",
+        document_id="doc-2",
+        chunk_id="c-2",
+        subject="Microsoft",
+        predicate="revenue",
+        value_text="$210 billion",
+        value_type=ValueType.CURRENCY,
+        currency="USD",
+        time_text="2023",
+        source_quote="Hallucinated quote not in chunk",
+        source_page_start=1,
+        source_page_end=1,
+        validation_status=ValidationStatus.REJECTED,
+    )
+
+    pair = generator.evaluate_pair(fact_valid, fact_rejected)
+    assert pair is None
+
+    pair_reverse = generator.evaluate_pair(fact_rejected, fact_valid)
+    assert pair_reverse is None
+
+
+def test_filter_rejected_facts_in_generate_candidates(tmp_path: Path):
+    """CandidateGenerator.generate_candidates must never load or pair rejected facts."""
+    db_file = str(tmp_path / "test_facts.db")
+    conn = get_connection(db_file)
+    conn.execute(
+        """INSERT INTO documents (id, filename, original_filename, sha256, file_size)
+           VALUES ('doc-1', 'd1.pdf', 'd1.pdf', 'h1', 100),
+                  ('doc-2', 'd2.pdf', 'd2.pdf', 'h2', 200)"""
+    )
+    conn.execute(
+        """INSERT INTO chunks (id, document_id, sequence_index, start_page, end_page, text)
+           VALUES ('c-1', 'doc-1', 0, 1, 1, 'text 1'),
+                  ('c-2', 'doc-2', 0, 2, 2, 'text 2')"""
+    )
+    conn.execute(
+        """INSERT INTO facts (
+            id, document_id, chunk_id, subject, predicate,
+            value_text, value_type, currency, time_text,
+            source_quote, source_page_start, source_page_end, validation_status
+        ) VALUES
+        ('f-1', 'doc-1', 'c-1', 'Microsoft', 'revenue', '$200B', 'currency', 'USD', '2023', 'q1', 1, 1, 'validated'),
+        ('f-2', 'doc-2', 'c-2', 'Microsoft', 'revenue', '$210B', 'currency', 'USD', '2023', 'q2', 2, 2, 'rejected')"""
+    )
+    conn.commit()
+    conn.close()
+
+    generator = CandidateGenerator(db_path=db_file, min_score=0.4)
+    pairs = generator.generate_candidates()
+    assert len(pairs) == 0
 

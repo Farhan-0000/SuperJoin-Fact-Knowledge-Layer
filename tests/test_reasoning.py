@@ -579,3 +579,181 @@ def test_reconcile_cli(tmp_path: Path, capsys: pytest.CaptureFixture):
     captured = capsys.readouterr().out
     assert "CORROBORATES" in captured
     assert "Evaluated 1 relationships" in captured
+
+
+def test_contradiction_requires_explicit_scope_compatibility():
+    """Asymmetric scope (e.g. UK segment vs unspecified) must RECONCILE on SCOPE, not CONTRADICT."""
+    comparator = DeterministicComparator()
+    fact_uk = FactSchema(
+        id="f-uk",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="Barclays",
+        predicate="revenue",
+        value_text="£7 billion",
+        value_type=ValueType.CURRENCY,
+        currency="GBP",
+        normalized_numeric_value=7_000_000_000.0,
+        time_text="2023",
+        scope="UK operations",
+        geography="UK",
+        source_quote="Barclays UK revenue was £7 billion in 2023.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+    fact_total = FactSchema(
+        id="f-total",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="Barclays",
+        predicate="revenue",
+        value_text="£25 billion",
+        value_type=ValueType.CURRENCY,
+        currency="GBP",
+        normalized_numeric_value=25_000_000_000.0,
+        time_text="2023",
+        scope=None,  # Unspecified
+        geography="UK",
+        source_quote="Barclays reported total revenue of £25 billion in 2023.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+
+    is_conclusive, classification, ctx = comparator.compare(fact_uk, fact_total)
+    assert is_conclusive is True
+    assert classification is not None
+    assert classification.relationship_type == RelationshipType.RECONCILES
+    assert classification.relationship_type != RelationshipType.CONTRADICTS
+    assert classification.primary_dimension == PrimaryDimension.SCOPE
+
+
+def test_contradiction_requires_explicit_geography_compatibility():
+    """Asymmetric geography (e.g. Europe vs unspecified) must RECONCILE on GEOGRAPHY, not CONTRADICT."""
+    comparator = DeterministicComparator()
+    fact_eu = FactSchema(
+        id="f-eu",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="Unilever",
+        predicate="sales",
+        value_text="€15 billion",
+        value_type=ValueType.CURRENCY,
+        currency="EUR",
+        normalized_numeric_value=15_000_000_000.0,
+        time_text="2023",
+        scope="consolidated",
+        geography="Europe",
+        source_quote="European sales were €15 billion.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+    fact_global = FactSchema(
+        id="f-global",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="Unilever",
+        predicate="sales",
+        value_text="€60 billion",
+        value_type=ValueType.CURRENCY,
+        currency="EUR",
+        normalized_numeric_value=60_000_000_000.0,
+        time_text="2023",
+        scope="consolidated",
+        geography=None,  # Unspecified
+        source_quote="Total sales reached €60 billion.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+
+    is_conclusive, classification, ctx = comparator.compare(fact_eu, fact_global)
+    assert is_conclusive is True
+    assert classification is not None
+    assert classification.relationship_type == RelationshipType.RECONCILES
+    assert classification.relationship_type != RelationshipType.CONTRADICTS
+    assert classification.primary_dimension == PrimaryDimension.GEOGRAPHY
+
+
+def test_contradiction_requires_explicit_currency_compatibility():
+    """Asymmetric or differing currency must RECONCILE on UNIT, not CONTRADICT."""
+    comparator = DeterministicComparator()
+    fact_usd = FactSchema(
+        id="f-usd",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="GlobalCorp",
+        predicate="revenue",
+        value_text="$100 million",
+        value_type=ValueType.CURRENCY,
+        currency="USD",
+        normalized_numeric_value=100_000_000.0,
+        time_text="2023",
+        scope="consolidated",
+        geography="global",
+        source_quote="Revenue was $100 million.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+    fact_nocurr = FactSchema(
+        id="f-nocurr",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="GlobalCorp",
+        predicate="revenue",
+        value_text="120 million",
+        value_type=ValueType.NUMBER,
+        currency=None,  # Unspecified currency
+        normalized_numeric_value=120_000_000.0,
+        time_text="2023",
+        scope="consolidated",
+        geography="global",
+        source_quote="Revenue reported was 120 million.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+
+    is_conclusive, classification, ctx = comparator.compare(fact_usd, fact_nocurr)
+    assert is_conclusive is True
+    assert classification is not None
+    assert classification.relationship_type == RelationshipType.RECONCILES
+    assert classification.relationship_type != RelationshipType.CONTRADICTS
+    assert classification.primary_dimension == PrimaryDimension.UNIT
+
+
+def test_evaluate_pair_with_rejected_fact_returns_uncertain():
+    """RelationshipEngine.evaluate_pair must refuse to assert relationships for rejected facts."""
+    engine = RelationshipEngine(provider=MockRelationshipProvider())
+    fact_good = FactSchema(
+        id="f-good",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="Apple",
+        predicate="revenue",
+        value_text="$383B",
+        value_type=ValueType.CURRENCY,
+        currency="USD",
+        time_text="2023",
+        source_quote="Apple revenue was $383B",
+        source_page_start=1,
+        source_page_end=1,
+        validation_status=ValidationStatus.VALIDATED,
+    )
+    fact_bad = FactSchema(
+        id="f-bad",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="Apple",
+        predicate="revenue",
+        value_text="$383B",
+        value_type=ValueType.CURRENCY,
+        currency="USD",
+        time_text="2023",
+        source_quote="Fake ungrounded quote",
+        source_page_start=1,
+        source_page_end=1,
+        validation_status=ValidationStatus.REJECTED,
+    )
+
+    rel = engine.evaluate_pair(fact_good, fact_bad)
+    assert rel.relationship_type == RelationshipType.UNCERTAIN
+    assert rel.confidence == 0.0
+    assert "rejected" in rel.explanation.lower()

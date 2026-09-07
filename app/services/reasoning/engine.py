@@ -114,6 +114,28 @@ class RelationshipEngine:
         entity_b: Optional[EntitySchema] = None,
     ) -> RelationshipSchema:
         """Evaluate relationship between two facts using hybrid deterministic + LLM approach."""
+        # ── Step 0: Reject facts that failed verification ────────────
+        if (
+            fact_a.validation_status in (ValidationStatus.REJECTED, "rejected")
+            or fact_b.validation_status in (ValidationStatus.REJECTED, "rejected")
+        ):
+            rel_id = str(uuid.uuid4())
+            rej_id = (
+                fact_a.id
+                if fact_a.validation_status in (ValidationStatus.REJECTED, "rejected")
+                else fact_b.id
+            )
+            return RelationshipSchema(
+                id=rel_id,
+                fact_a_id=fact_a.id,
+                fact_b_id=fact_b.id,
+                relationship_type=RelationshipType.UNCERTAIN,
+                confidence=0.0,
+                primary_dimension=PrimaryDimension.VALUE,
+                explanation=f"Cannot establish relationship because fact {rej_id} failed source evidence verification (rejected).",
+                context_comparison_json=json.dumps({"rejected_fact_id": rej_id}),
+            )
+
         # ── Step 1: Run Deterministic 9-Dimension Comparison ─────────
         is_conclusive, classification, context = self.comparator.compare(
             fact_a, fact_b, entity_a, entity_b
@@ -217,8 +239,10 @@ class RelationshipEngine:
             if not cp_rows:
                 return []
 
-            # Load facts
-            fact_rows = conn.execute("SELECT * FROM facts").fetchall()
+            # Load facts (strictly excluding rejected facts)
+            fact_rows = conn.execute(
+                "SELECT * FROM facts WHERE validation_status != 'rejected'"
+            ).fetchall()
             facts_by_id = {
                 r["id"]: FactSchema(
                     id=r["id"],

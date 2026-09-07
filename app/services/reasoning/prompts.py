@@ -17,6 +17,8 @@ UNCERTAIN
 UNRELATED
 
 Do not call two facts contradictory merely because their values differ.
+Require explicit compatibility for scope, geography, and currency before declaring CONTRADICTS.
+If scope, geography, or currency differ or are asymmetric (e.g. one specifies a scope/geography and the other is unspecified), classify as RECONCILES or UNCERTAIN, not CONTRADICTS.
 Examine:
 entity identity;
 predicate/metric equivalence;
