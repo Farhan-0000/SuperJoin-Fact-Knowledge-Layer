@@ -111,7 +111,7 @@ class LocalJobRunner:
     ) -> None:
         """Asynchronously execute pipeline stages for the given document IDs."""
         logger.info("Starting pipeline execution for job %s (mode=%s, docs=%s)", job_id, mode, document_ids)
-        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self._update_job(
             job_id,
             status=JobStatus.RUNNING.value,
@@ -188,7 +188,7 @@ class LocalJobRunner:
             completed_steps += 1
 
             # ── 3. Completed ──────────────────────────────────────────
-            completed_now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            completed_now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._update_job(
                 job_id,
                 status=JobStatus.COMPLETED.value,
@@ -207,7 +207,7 @@ class LocalJobRunner:
                 status=JobStatus.FAILED.value,
                 stage="failed",
                 error_message=str(e),
-                completed_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                completed_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
 
     def start_job(
