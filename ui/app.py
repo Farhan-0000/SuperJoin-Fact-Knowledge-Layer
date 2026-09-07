@@ -5,8 +5,13 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Ensure project root is in sys.path so ui package and app package can be imported cleanly
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Ensure project root is first in sys.path and remove the 'ui' directory from sys.path.
+# Streamlit automatically adds the script directory ('ui') to sys.path, which causes
+# 'ui/app.py' to shadow the root 'app' package when 'import app...' is executed.
+_UI_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _UI_DIR.parent
+
+sys.path = [p for p in sys.path if Path(p).resolve() != _UI_DIR]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 

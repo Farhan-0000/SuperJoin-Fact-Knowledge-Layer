@@ -9,6 +9,16 @@ import logging
 import uuid
 from typing import Any, Optional
 
+import sys
+from pathlib import Path
+
+# Ensure project root is first in sys.path and remove 'ui' directory from sys.path
+_UI_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _UI_DIR.parent
+sys.path = [p for p in sys.path if Path(p).resolve() != _UI_DIR]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 from app.db.database import get_connection
 from app.models.schemas import DocumentStatus
 from app.services.ingestion.document_ingestor import DocumentIngestor
