@@ -1,0 +1,2 @@
+# This directory stores uploaded PDFs and the SQLite database at runtime.
+# It is created automatically and should not be committed to version control.
