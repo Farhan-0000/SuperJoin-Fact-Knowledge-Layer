@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Optional
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings
@@ -15,11 +16,55 @@ class Settings(BaseSettings):
 
     # ── LLM ────────────────────────────────────────────────────────
     openai_api_key: str = Field(default="", description="OpenAI API key")
+    openai_base_url: Optional[str] = Field(default=None, description="Base URL for OpenAI-compatible providers like Gemini")
+    gemini_api_key: str = Field(default="", description="Gemini API key")
     extraction_model: str = Field(default="gpt-4o", description="Model for fact extraction")
     relationship_model: str = Field(default="gpt-4o", description="Model for relationship reasoning")
     embedding_model: str = Field(
         default="text-embedding-3-small", description="Model for embedding generation"
     )
+
+    @property
+    def is_gemini(self) -> bool:
+        """Detect if configured key is a Gemini API key or base_url is Google."""
+        key = self.gemini_api_key or self.openai_api_key
+        url = self.openai_base_url or ""
+        return (
+            bool(self.gemini_api_key)
+            or key.startswith("AQ.")
+            or key.startswith("AIzaSy")
+            or "googleapis.com" in url
+        )
+
+    @property
+    def effective_api_key(self) -> str:
+        return self.gemini_api_key or self.openai_api_key
+
+    @property
+    def resolved_base_url(self) -> Optional[str]:
+        if self.openai_base_url:
+            return self.openai_base_url
+        if self.is_gemini:
+            return "https://generativelanguage.googleapis.com/v1beta/openai/"
+        return None
+
+    @property
+    def resolved_extraction_model(self) -> str:
+        if self.is_gemini and (self.extraction_model.startswith("gpt-") or self.extraction_model in ("gpt-4o", "gpt-4o-mini")):
+            return "gemini-3.6-flash"
+        return self.extraction_model
+
+    @property
+    def resolved_relationship_model(self) -> str:
+        if self.is_gemini and (self.relationship_model.startswith("gpt-") or self.relationship_model in ("gpt-4o", "gpt-4o-mini")):
+            return "gemini-3.6-flash"
+        return self.relationship_model
+
+    @property
+    def resolved_embedding_model(self) -> str:
+        if self.is_gemini and "text-embedding-3" in self.embedding_model:
+            return "gemini-embedding-001"
+        return self.embedding_model
 
     # ── Candidate Generation ───────────────────────────────────────
     candidate_min_score: float = Field(

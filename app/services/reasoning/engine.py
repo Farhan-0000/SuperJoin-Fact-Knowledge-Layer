@@ -50,12 +50,12 @@ class RelationshipEngine:
         settings = get_settings()
         self.db_path = db_path
         self.comparator = comparator or DeterministicComparator()
-        self.model = model or settings.relationship_model or "gpt-4o"
+        self.model = model or settings.resolved_relationship_model or "gpt-4o"
 
         if provider is not None:
             self.provider = provider
         else:
-            if settings.openai_api_key and not settings.openai_api_key.startswith("sk-test-"):
+            if settings.effective_api_key and not settings.effective_api_key.startswith("sk-test-"):
                 self.provider = OpenAIRelationshipProvider()
             else:
                 self.provider = MockRelationshipProvider()

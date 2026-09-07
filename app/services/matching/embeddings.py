@@ -138,11 +138,16 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         dimensions: Optional[int] = None,
     ):
         settings = get_settings()
-        self._api_key = api_key or settings.openai_api_key
-        self._model = model or settings.embedding_model or "text-embedding-3-small"
-        self._dimensions = dimensions or (
-            1536 if "text-embedding-3-small" in self._model else 3072
-        )
+        self._api_key = api_key or settings.effective_api_key
+        self._base_url = settings.resolved_base_url
+        self._model = model or settings.resolved_embedding_model or "text-embedding-3-small"
+        if "text-embedding-3-small" in self._model:
+            default_dim = 1536
+        elif "gemini-embedding" in self._model:
+            default_dim = 3072
+        else:
+            default_dim = 3072
+        self._dimensions = dimensions or default_dim
 
     @property
     def model_name(self) -> str:
@@ -153,13 +158,13 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         return self._dimensions
 
     def get_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Call OpenAI embeddings API synchronously."""
+        """Call OpenAI/Gemini embeddings API synchronously."""
         if not texts:
             return []
 
         from openai import OpenAI
 
-        client = OpenAI(api_key=self._api_key)
+        client = OpenAI(api_key=self._api_key, base_url=self._base_url)
         kwargs = {"input": texts, "model": self._model}
         if "text-embedding-3" in self._model and self._dimensions:
             kwargs["dimensions"] = self._dimensions

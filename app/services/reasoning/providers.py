@@ -29,15 +29,16 @@ class OpenAIRelationshipProvider(BaseRelationshipProvider):
 
     def __init__(self, api_key: Optional[str] = None):
         settings = get_settings()
-        self.api_key = api_key or settings.openai_api_key
+        self.api_key = api_key or settings.effective_api_key
+        self.base_url = settings.resolved_base_url
 
     def classify(
         self, messages: list[dict[str, str]], model: str
     ) -> LLMRelationshipClassification:
-        """Call OpenAI chat completions with Pydantic structured output."""
+        """Call OpenAI/Gemini chat completions with Pydantic structured output."""
         from openai import OpenAI
 
-        client = OpenAI(api_key=self.api_key)
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         completion = client.beta.chat.completions.parse(
             model=model,
             messages=messages,  # type: ignore[arg-type]

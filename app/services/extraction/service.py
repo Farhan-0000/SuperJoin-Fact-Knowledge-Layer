@@ -43,8 +43,9 @@ class OpenAIExtractionProvider(BaseExtractionProvider):
         import openai
 
         settings = get_settings()
-        key = api_key or settings.openai_api_key
-        self.client = openai.AsyncOpenAI(api_key=key)
+        key = api_key or settings.effective_api_key
+        base_url = settings.resolved_base_url
+        self.client = openai.AsyncOpenAI(api_key=key, base_url=base_url)
 
     async def generate_facts(
         self, messages: list[dict[str, str]], model: str
@@ -134,7 +135,7 @@ class ExtractionService:
         settings = get_settings()
         self.provider = provider or OpenAIExtractionProvider()
         self.prompt_version = prompt_version
-        self.model = settings.extraction_model
+        self.model = settings.resolved_extraction_model
         concurrency = max_concurrency or settings.max_llm_concurrency
         self.semaphore = asyncio.Semaphore(concurrency)
         self.verifier = EvidenceVerifier()
