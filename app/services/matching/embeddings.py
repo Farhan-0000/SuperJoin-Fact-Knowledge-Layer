@@ -178,9 +178,14 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
                 response = client.embeddings.create(**kwargs)
                 return [item.embedding for item in response.data]
             except Exception as exc:
+                err_name = type(exc).__name__
                 err_str = str(exc)
+                # Non-retryable client errors (bad request, auth)
+                if "BadRequest" in err_name or "INVALID_ARGUMENT" in err_str or "Authentication" in err_name:
+                    logger.error("Fatal embedding error (not retryable): %s", exc)
+                    raise
                 if (
-                    "RateLimit" in type(exc).__name__
+                    "RateLimit" in err_name
                     or "429" in err_str
                     or "RESOURCE_EXHAUSTED" in err_str
                 ) and attempt < max_retries - 1:
