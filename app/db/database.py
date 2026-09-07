@@ -362,4 +362,8 @@ def get_connection(db_path: Optional[str | Path] = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    row = conn.execute("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='documents'").fetchone()
+    if not row or row["c"] == 0:
+        conn.executescript(SCHEMA_SQL)
+        conn.commit()
     return conn
