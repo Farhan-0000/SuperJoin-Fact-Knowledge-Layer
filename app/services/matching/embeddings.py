@@ -157,16 +157,16 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
     def dimensions(self) -> int:
         return self._dimensions
 
-    def get_embeddings(self, texts: list[str]) -> list[list[float]]:
-        """Call OpenAI/Gemini embeddings API synchronously."""
-        if not texts:
-            return []
+    # Gemini embedding API hard-caps at 100 items per batch request.
+    _GEMINI_MAX_BATCH = 100
 
+    def _embed_batch_with_retry(self, texts: list[str]) -> list[list[float]]:
+        """Embed a single batch (≤100 items) with retry + backoff."""
         import time
         from openai import OpenAI
 
         client = OpenAI(api_key=self._api_key, base_url=self._base_url)
-        kwargs = {"input": texts, "model": self._model}
+        kwargs: dict = {"input": texts, "model": self._model}
         if "text-embedding-3" in self._model and self._dimensions:
             kwargs["dimensions"] = self._dimensions
 
@@ -203,6 +203,28 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
                     time.sleep(1.0)
                 else:
                     raise
+        return []  # unreachable, keeps type-checker happy
+
+    def get_embeddings(self, texts: list[str]) -> list[list[float]]:
+        """Call OpenAI/Gemini embeddings API, automatically sub-batching for Gemini's 100-item limit."""
+        import time
+
+        if not texts:
+            return []
+
+        is_gemini = get_settings().is_gemini
+        batch_size = min(self._GEMINI_MAX_BATCH, len(texts)) if is_gemini else len(texts)
+
+        all_vectors: list[list[float]] = []
+        for start in range(0, len(texts), batch_size):
+            chunk = texts[start : start + batch_size]
+            vectors = self._embed_batch_with_retry(chunk)
+            all_vectors.extend(vectors)
+            # Pace between sub-batches on Gemini to avoid RPM spikes
+            if is_gemini and start + batch_size < len(texts):
+                time.sleep(2.0)
+
+        return all_vectors
 
 
 class MockEmbeddingProvider(BaseEmbeddingProvider):

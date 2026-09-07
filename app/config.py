@@ -68,9 +68,13 @@ class Settings(BaseSettings):
 
     @property
     def resolved_max_llm_concurrency(self) -> int:
-        """Keep concurrency conservative on free-tier rate limits."""
+        """Keep concurrency conservative on free-tier rate limits.
+
+        Gemini free tier allows only 15 RPM.  Serializing to concurrency=1
+        combined with inter-call pacing guarantees we stay under the limit.
+        """
         if self.is_gemini:
-            return min(self.max_llm_concurrency, 2)
+            return 1
         return self.max_llm_concurrency
 
     # ── Candidate Generation ───────────────────────────────────────

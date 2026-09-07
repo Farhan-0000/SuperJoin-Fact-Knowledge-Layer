@@ -47,7 +47,7 @@ class OpenAIRelationshipProvider(BaseRelationshipProvider):
         for attempt in range(max_retries):
             try:
                 if is_gemini:
-                    time.sleep(1.0)
+                    time.sleep(4.5)  # ~13 RPM, under 15 RPM free-tier limit
                 completion = client.beta.chat.completions.parse(
                     model=model,
                     messages=messages,  # type: ignore[arg-type]

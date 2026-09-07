@@ -316,7 +316,7 @@ class ExtractionService:
             try:
                 async with self.semaphore:
                     if get_settings().is_gemini:
-                        await asyncio.sleep(1.0)
+                        await asyncio.sleep(4.5)  # ~13 RPM, under 15 RPM free-tier limit
                     return await self.provider.generate_facts(messages, self.model)
             except Exception as exc:
                 last_exc = exc
