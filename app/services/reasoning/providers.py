@@ -36,18 +36,53 @@ class OpenAIRelationshipProvider(BaseRelationshipProvider):
         self, messages: list[dict[str, str]], model: str
     ) -> LLMRelationshipClassification:
         """Call OpenAI/Gemini chat completions with Pydantic structured output."""
+        import time
         from openai import OpenAI
 
         client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-        completion = client.beta.chat.completions.parse(
-            model=model,
-            messages=messages,  # type: ignore[arg-type]
-            response_format=LLMRelationshipClassification,
-        )
-        parsed = completion.choices[0].message.parsed
-        if parsed is None:
-            raise ValueError("OpenAI returned empty structured output for relationship")
-        return parsed
+        is_gemini = get_settings().is_gemini
+        max_retries = 3
+        delay = 5.0 if is_gemini else 1.0
+
+        for attempt in range(max_retries):
+            try:
+                if is_gemini:
+                    time.sleep(1.0)
+                completion = client.beta.chat.completions.parse(
+                    model=model,
+                    messages=messages,  # type: ignore[arg-type]
+                    response_format=LLMRelationshipClassification,
+                )
+                parsed = completion.choices[0].message.parsed
+                if parsed is None:
+                    raise ValueError("OpenAI returned empty structured output for relationship")
+                return parsed
+            except Exception as exc:
+                err_str = str(exc)
+                if (
+                    "RateLimit" in type(exc).__name__
+                    or "429" in err_str
+                    or "RESOURCE_EXHAUSTED" in err_str
+                ) and attempt < max_retries - 1:
+                    logger.warning(
+                        "Rate limit in relationship reasoning (attempt %d/%d). Backing off %.1fs: %s",
+                        attempt + 1,
+                        max_retries,
+                        delay,
+                        exc,
+                    )
+                    time.sleep(delay)
+                    delay *= 2.0
+                elif attempt < max_retries - 1:
+                    logger.warning(
+                        "Transient error in relationship reasoning (attempt %d/%d): %s. Retrying in 1s...",
+                        attempt + 1,
+                        max_retries,
+                        exc,
+                    )
+                    time.sleep(1.0)
+                else:
+                    raise
 
 
 class MockRelationshipProvider(BaseRelationshipProvider):

@@ -162,6 +162,7 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         if not texts:
             return []
 
+        import time
         from openai import OpenAI
 
         client = OpenAI(api_key=self._api_key, base_url=self._base_url)
@@ -169,8 +170,39 @@ class OpenAIEmbeddingProvider(BaseEmbeddingProvider):
         if "text-embedding-3" in self._model and self._dimensions:
             kwargs["dimensions"] = self._dimensions
 
-        response = client.embeddings.create(**kwargs)
-        return [item.embedding for item in response.data]
+        max_retries = 3
+        delay = 5.0 if get_settings().is_gemini else 1.0
+
+        for attempt in range(max_retries):
+            try:
+                response = client.embeddings.create(**kwargs)
+                return [item.embedding for item in response.data]
+            except Exception as exc:
+                err_str = str(exc)
+                if (
+                    "RateLimit" in type(exc).__name__
+                    or "429" in err_str
+                    or "RESOURCE_EXHAUSTED" in err_str
+                ) and attempt < max_retries - 1:
+                    logger.warning(
+                        "Rate limit on embeddings (attempt %d/%d). Backing off %.1fs: %s",
+                        attempt + 1,
+                        max_retries,
+                        delay,
+                        exc,
+                    )
+                    time.sleep(delay)
+                    delay *= 2.0
+                elif attempt < max_retries - 1:
+                    logger.warning(
+                        "Transient error on embeddings (attempt %d/%d): %s. Retrying in 1s...",
+                        attempt + 1,
+                        max_retries,
+                        exc,
+                    )
+                    time.sleep(1.0)
+                else:
+                    raise
 
 
 class MockEmbeddingProvider(BaseEmbeddingProvider):
