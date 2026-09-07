@@ -50,14 +50,14 @@ class Settings(BaseSettings):
 
     @property
     def resolved_extraction_model(self) -> str:
-        if self.is_gemini and (self.extraction_model.startswith("gpt-") or self.extraction_model in ("gpt-4o", "gpt-4o-mini")):
-            return "gemini-3.6-flash"
+        if self.is_gemini and (self.extraction_model.startswith("gpt-") or self.extraction_model in ("gpt-4o", "gpt-4o-mini", "gemini-3.6-flash")):
+            return "gemini-3.1-flash-lite"
         return self.extraction_model
 
     @property
     def resolved_relationship_model(self) -> str:
-        if self.is_gemini and (self.relationship_model.startswith("gpt-") or self.relationship_model in ("gpt-4o", "gpt-4o-mini")):
-            return "gemini-3.6-flash"
+        if self.is_gemini and (self.relationship_model.startswith("gpt-") or self.relationship_model in ("gpt-4o", "gpt-4o-mini", "gemini-3.6-flash")):
+            return "gemini-3.1-flash-lite"
         return self.relationship_model
 
     @property
@@ -65,6 +65,13 @@ class Settings(BaseSettings):
         if self.is_gemini and "text-embedding-3" in self.embedding_model:
             return "gemini-embedding-001"
         return self.embedding_model
+
+    @property
+    def resolved_max_llm_concurrency(self) -> int:
+        """Keep concurrency conservative on free-tier rate limits."""
+        if self.is_gemini:
+            return min(self.max_llm_concurrency, 2)
+        return self.max_llm_concurrency
 
     # ── Candidate Generation ───────────────────────────────────────
     candidate_min_score: float = Field(

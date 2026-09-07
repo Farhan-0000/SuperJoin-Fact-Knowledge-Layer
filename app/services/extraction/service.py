@@ -136,7 +136,7 @@ class ExtractionService:
         self.provider = provider or OpenAIExtractionProvider()
         self.prompt_version = prompt_version
         self.model = settings.resolved_extraction_model
-        concurrency = max_concurrency or settings.max_llm_concurrency
+        concurrency = max_concurrency or settings.resolved_max_llm_concurrency
         self.semaphore = asyncio.Semaphore(concurrency)
         self.verifier = EvidenceVerifier()
 
@@ -315,6 +315,8 @@ class ExtractionService:
         for attempt in range(max_retries):
             try:
                 async with self.semaphore:
+                    if get_settings().is_gemini:
+                        await asyncio.sleep(1.0)
                     return await self.provider.generate_facts(messages, self.model)
             except Exception as exc:
                 last_exc = exc
@@ -324,15 +326,21 @@ class ExtractionService:
                     logger.error("Fatal LLM error: %s", exc)
                     raise
 
+                is_rate_limit = (
+                    "RateLimit" in err_name
+                    or "429" in str(exc)
+                    or "RESOURCE_EXHAUSTED" in str(exc)
+                )
+                retry_wait = max(delay, 5.0 * (attempt + 1)) if is_rate_limit else delay
                 logger.warning(
                     "LLM call transient failure (%s, attempt %d/%d): %s. Retrying in %.2fs...",
                     err_name,
                     attempt + 1,
                     max_retries,
                     exc,
-                    delay,
+                    retry_wait,
                 )
-                await asyncio.sleep(delay)
+                await asyncio.sleep(retry_wait)
                 delay *= backoff_factor
 
         logger.error("LLM call failed after %d attempts: %s", max_retries, last_exc)
