@@ -392,3 +392,69 @@ class HealthResponse(BaseModel):
     version: str = "0.1.0"
     database: str = "connected"
     documents_count: int = 0
+
+
+# ── Knowledge Summary ──────────────────────────────────────────────
+
+
+class KnowledgeSummarySchema(BaseModel):
+    """Aggregated statistics across the knowledge layer."""
+    documents: int = 0
+    facts: int = 0
+    validated_facts: int = 0
+    warnings: int = 0
+    rejected: int = 0
+    relationships: int = 0
+    corroborations: int = 0
+    contradictions: int = 0
+    reconciliations: int = 0
+    uncertain: int = 0
+    unrelated: int = 0
+    entities: int = 0
+
+
+# ── Job Requests & Responses ───────────────────────────────────────
+
+
+class CreateJobRequest(BaseModel):
+    """Payload for enqueuing a processing job."""
+    document_ids: list[str] = Field(..., description="Document IDs to process")
+    mode: str = Field(default="full", description="Processing mode (full, extraction, relationship, reprocess)")
+
+
+class CreateJobResponse(BaseModel):
+    """Response returned upon enqueuing a job (202 Accepted)."""
+    job_id: str
+    status: str = "queued"
+
+
+class JobStatusResponse(BaseModel):
+    """Status details of an ongoing or completed job."""
+    id: str
+    status: str
+    stage: str | None = None
+    progress: float = 0.0
+    completed_items: int = 0
+    total_items: int = 0
+    error_message: str | None = None
+    created_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+# ── Document Upload Responses ──────────────────────────────────────
+
+
+class UploadedDocumentItem(BaseModel):
+    """Summary of an uploaded document."""
+    id: str
+    filename: str
+    original_filename: str
+    page_count: int | None = None
+    status: str = "uploaded"
+    sha256: str
+
+
+class UploadDocumentsResponse(BaseModel):
+    """Response returned upon uploading documents."""
+    documents: list[UploadedDocumentItem]

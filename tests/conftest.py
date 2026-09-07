@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.fixtures_pdf import create_sample_pdf
+
 
 @pytest.fixture(autouse=True)
 def _isolate_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -38,3 +40,9 @@ def client() -> TestClient:
     app = create_app()
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def sample_pdf_bytes() -> bytes:
+    """Fixture returning raw PDF bytes with 4 pages."""
+    return create_sample_pdf()

@@ -21,6 +21,14 @@ class Settings(BaseSettings):
         default="text-embedding-3-small", description="Model for embedding generation"
     )
 
+    # ── Candidate Generation ───────────────────────────────────────
+    candidate_min_score: float = Field(
+        default=0.60, ge=0.0, le=1.0, description="Minimum candidate score to retain pair"
+    )
+    candidate_top_k: int = Field(
+        default=10, ge=1, le=100, description="Max candidate pairs to retain per fact"
+    )
+
     # ── Storage ────────────────────────────────────────────────────
     storage_dir: str = Field(default="./storage", description="Directory for uploaded files")
     database_url: str = Field(

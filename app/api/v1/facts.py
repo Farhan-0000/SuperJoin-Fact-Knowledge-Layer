@@ -1,4 +1,4 @@
-"""Fact query and retrieval routes."""
+"""V1 Fact query and detail routes."""
 
 from __future__ import annotations
 
@@ -15,39 +15,43 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/facts", tags=["facts"])
 
 
-@router.get("", response_model=list[FactSchema], summary="List and filter facts")
+@router.get("", response_model=list[FactSchema], summary="Query and filter facts")
 def list_facts(
     document_id: Optional[str] = Query(None, description="Filter facts by document ID"),
-    validation_status: Optional[str] = Query(None, description="Filter by validation status"),
-    subject: Optional[str] = Query(None, description="Filter by subject keyword"),
-    predicate: Optional[str] = Query(None, description="Filter by predicate keyword"),
+    entity: Optional[str] = Query(None, description="Filter facts by subject/entity keyword"),
+    predicate: Optional[str] = Query(None, description="Filter facts by predicate keyword"),
+    validation_status: Optional[str] = Query(None, description="Filter by validation status (validated, warning, rejected)"),
     min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum extraction confidence"),
-    limit: int = Query(50, ge=1, le=500, description="Maximum items to return"),
-    offset: int = Query(0, ge=0, description="Offset for pagination"),
+    limit: int = Query(50, ge=1, le=500, description="Max facts to return"),
+    offset: int = Query(0, ge=0, description="Pagination offset"),
 ) -> list[FactSchema]:
     """Retrieve extracted facts with filtering and pagination."""
     conn = get_connection()
     try:
-        query = "SELECT * FROM facts WHERE 1=1"
+        query = """
+            SELECT f.* FROM facts f
+            LEFT JOIN entities e ON f.entity_id = e.id
+            WHERE 1=1
+        """
         params: list[object] = []
 
         if document_id:
-            query += " AND document_id = ?"
+            query += " AND f.document_id = ?"
             params.append(document_id)
-        if validation_status:
-            query += " AND validation_status = ?"
-            params.append(validation_status)
-        if subject:
-            query += " AND subject LIKE ?"
-            params.append(f"%{subject}%")
+        if entity:
+            query += " AND (f.subject LIKE ? OR e.canonical_name LIKE ?)"
+            params.extend([f"%{entity}%", f"%{entity}%"])
         if predicate:
-            query += " AND predicate LIKE ?"
+            query += " AND f.predicate LIKE ?"
             params.append(f"%{predicate}%")
+        if validation_status:
+            query += " AND f.validation_status = ?"
+            params.append(validation_status)
         if min_confidence is not None:
-            query += " AND extraction_confidence >= ?"
+            query += " AND f.extraction_confidence >= ?"
             params.append(min_confidence)
 
-        query += " ORDER BY rowid DESC LIMIT ? OFFSET ?"
+        query += " ORDER BY f.rowid DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         rows = conn.execute(query, params).fetchall()
@@ -82,6 +86,7 @@ def list_facts(
                 extraction_confidence=r["extraction_confidence"],
                 validation_status=ValidationStatus(r["validation_status"]),
                 extraction_notes_json=r["extraction_notes_json"],
+                created_at=r["created_at"],
             )
             for r in rows
         ]
@@ -91,12 +96,15 @@ def list_facts(
 
 @router.get("/{fact_id}", response_model=FactSchema, summary="Get fact details by ID")
 def get_fact(fact_id: str) -> FactSchema:
-    """Retrieve an individual fact with complete provenance and evidence."""
+    """Retrieve a single fact by its unique ID with complete provenance."""
     conn = get_connection()
     try:
         row = conn.execute("SELECT * FROM facts WHERE id = ?", (fact_id,)).fetchone()
         if not row:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fact not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Fact '{fact_id}' not found",
+            )
         return FactSchema(
             id=row["id"],
             document_id=row["document_id"],
@@ -127,6 +135,7 @@ def get_fact(fact_id: str) -> FactSchema:
             extraction_confidence=row["extraction_confidence"],
             validation_status=ValidationStatus(row["validation_status"]),
             extraction_notes_json=row["extraction_notes_json"],
+            created_at=row["created_at"],
         )
     finally:
         conn.close()

@@ -342,11 +342,11 @@ def get_db_path() -> Path:
     return db_path
 
 
-def init_db() -> None:
+def init_db(db_path: Optional[str | Path] = None) -> None:
     """Create tables if they do not exist (synchronous, used at startup)."""
-    db_path = get_db_path()
-    logger.info("Initializing database at %s", db_path)
-    conn = sqlite3.connect(str(db_path))
+    target_path = Path(db_path) if db_path else get_db_path()
+    logger.info("Initializing database at %s", target_path)
+    conn = sqlite3.connect(str(target_path))
     try:
         conn.executescript(SCHEMA_SQL)
         conn.commit()
@@ -355,10 +355,10 @@ def init_db() -> None:
         conn.close()
 
 
-def get_connection() -> sqlite3.Connection:
+def get_connection(db_path: Optional[str | Path] = None) -> sqlite3.Connection:
     """Return a new synchronous SQLite connection with WAL and FK enabled."""
-    db_path = get_db_path()
-    conn = sqlite3.connect(str(db_path))
+    target_path = Path(db_path) if db_path else get_db_path()
+    conn = sqlite3.connect(str(target_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
