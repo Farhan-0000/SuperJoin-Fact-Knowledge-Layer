@@ -136,7 +136,7 @@ pytest -v
 
 ## Video Demo
 
-> **Video Link**: [Watch the 3-Minute Video Walkthrough](https://youtu.be/placeholder-demo-link)  
+> **Video Link**: [Watch the 3-Minute Video Walkthrough (YouTube)](https://youtu.be/bnUxLjPtWKw)  
 > *(Total Duration: 3 minutes or less — demonstrating live PDF processing, evidence inspection, and all four required cases).*
 
 ### The Four Required Cases Demonstrated in the Demo
@@ -260,19 +260,18 @@ graph TD
 
 ```mermaid
 erDiagram
-    documents ||--o{ pages : contains
-    pages ||--o{ blocks : contains
-    documents ||--o{ chunks : partitioned_into
-    chunks ||--o{ facts : extracted_from
-    entities ||--o{ entity_aliases : has
-    entities ||--o{ facts : referenced_by
-    facts ||--o{ fact_embeddings : indexed_by
-    facts ||--o{ candidate_pairs : participates_as_a
-    facts ||--o{ candidate_pairs : participates_as_b
-    facts ||--o{ relationships : source_fact_a
-    facts ||--o{ relationships : target_fact_b
-    documents ||--o{ jobs : processed_in
-    llm_cache
+    documents ||--o{ pages : "contains"
+    pages ||--o{ blocks : "contains"
+    documents ||--o{ chunks : "partitioned_into"
+    chunks ||--o{ facts : "extracted_from"
+    entities ||--o{ entity_aliases : "has"
+    entities ||--o{ facts : "referenced_by"
+    facts ||--o{ fact_embeddings : "indexed_by"
+    facts ||--o{ candidate_pairs : "participates_as_a"
+    facts ||--o{ candidate_pairs : "participates_as_b"
+    facts ||--o{ relationships : "source_fact_a"
+    facts ||--o{ relationships : "target_fact_b"
+    documents ||--o{ jobs : "processed_in"
 
     documents {
         string id PK
@@ -295,7 +294,10 @@ erDiagram
         string page_id FK
         int block_index
         string block_type
-        float x0, y0, x1, y1
+        float x0
+        float y0
+        float x1
+        float y1
         string text
     }
     chunks {
@@ -351,6 +353,17 @@ erDiagram
         float confidence
         string primary_dimension
         string explanation
+    }
+    fact_embeddings {
+        string fact_id PK
+        string model
+        string embedding_json
+    }
+    jobs {
+        string id PK
+        string job_type
+        string status
+        string current_stage
     }
     llm_cache {
         string id PK
