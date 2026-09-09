@@ -396,6 +396,23 @@ class UIDataService:
         finally:
             conn.close()
 
+    def get_low_quality_pages(self, quality_threshold: float = 0.30) -> list[dict[str, Any]]:
+        """Fetch pages flagged as scanned or having text extraction quality below threshold."""
+        conn = get_connection(self.db_path)
+        try:
+            rows = conn.execute(
+                """SELECT p.id, p.document_id, p.page_number, p.text_quality, p.is_scanned,
+                          d.original_filename as document_name, LENGTH(p.raw_text) as raw_len
+                   FROM pages p
+                   LEFT JOIN documents d ON p.document_id = d.id
+                   WHERE p.is_scanned = 1 OR (p.text_quality IS NOT NULL AND p.text_quality < ?)
+                   ORDER BY p.text_quality ASC, p.page_number ASC""",
+                (quality_threshold,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
     # ── 7. Demo Data Seeder ───────────────────────────────────────────
 
     def seed_demo_dataset(self) -> None:

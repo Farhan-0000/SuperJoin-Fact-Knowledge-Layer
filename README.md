@@ -6,7 +6,7 @@ An auditable document intelligence platform that extracts, normalizes, and recon
 
 ## Video Demo Link
 
-> **Video Demo**: [Watch the 5-Minute Video Walkthrough](https://youtu.be/placeholder-demo-link)  
+> **Video Demo**: [Watch the 3-Minute Video Walkthrough](https://youtu.be/placeholder-demo-link)  
 > *(A comprehensive step-by-step walkthrough script is available under [`docs/demo-script.md`](docs/demo-script.md)).*
 
 ---

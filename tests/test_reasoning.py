@@ -580,6 +580,13 @@ def test_reconcile_cli(tmp_path: Path, capsys: pytest.CaptureFixture):
     assert "CORROBORATES" in captured
     assert "Evaluated 1 relationships" in captured
 
+    # Test direct pair evaluation via CLI args: python -m app.cli.reconcile f-1 f-2
+    exit_code_pair = cli_main(["f-1", "f-2"])
+    assert exit_code_pair == 0
+    captured_pair = capsys.readouterr().out
+    assert "CORROBORATES" in captured_pair
+    assert "Loading facts for direct evaluation: 'f-1' <-> 'f-2'" in captured_pair
+
 
 def test_contradiction_requires_explicit_scope_compatibility():
     """Asymmetric scope (e.g. UK segment vs unspecified) must RECONCILE on SCOPE, not CONTRADICT."""
@@ -757,3 +764,131 @@ def test_evaluate_pair_with_rejected_fact_returns_uncertain():
     assert rel.relationship_type == RelationshipType.UNCERTAIN
     assert rel.confidence == 0.0
     assert "rejected" in rel.explanation.lower()
+
+
+def test_textual_address_corroboration_with_abbreviations():
+    """Differently written addresses referring to the same place must corroborate."""
+    comparator = DeterministicComparator()
+    entity = EntitySchema(id="e-uber", canonical_name="Uber Technologies, Inc.", entity_type=EntityType.ORGANIZATION)
+
+    fact_a = FactSchema(
+        id="f-addr-1",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="Uber Technologies, Inc.",
+        entity_id="e-uber",
+        predicate="headquarters",
+        value_text="San Francisco, CA",
+        value_type=ValueType.TEXT,
+        time_text="2023",
+        scope="company",
+        source_quote="Uber is headquartered in San Francisco, CA.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+    fact_b = FactSchema(
+        id="f-addr-2",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="Uber Technologies, Inc.",
+        entity_id="e-uber",
+        predicate="headquarters",
+        value_text="San Francisco, California",
+        value_type=ValueType.TEXT,
+        time_text="2023",
+        scope="company",
+        source_quote="Headquarters located in San Francisco, California.",
+        source_page_start=2,
+        source_page_end=2,
+    )
+
+    is_conclusive, classification, ctx = comparator.compare(fact_a, fact_b, entity, entity)
+    assert is_conclusive is True
+    assert classification is not None
+    assert classification.relationship_type == RelationshipType.CORROBORATES
+    assert classification.confidence == 1.0
+
+
+def test_street_address_corroboration():
+    """Detailed street address with abbreviations must corroborate full address."""
+    comparator = DeterministicComparator()
+    entity = EntitySchema(id="e-uber", canonical_name="Uber Technologies, Inc.", entity_type=EntityType.ORGANIZATION)
+
+    fact_a = FactSchema(
+        id="f-addr-3",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="Uber Technologies, Inc.",
+        entity_id="e-uber",
+        predicate="headquarters",
+        value_text="1515 3rd St, San Francisco, CA",
+        value_type=ValueType.TEXT,
+        time_text="2023",
+        scope="company",
+        source_quote="1515 3rd St, San Francisco, CA.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+    fact_b = FactSchema(
+        id="f-addr-4",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="Uber Technologies, Inc.",
+        entity_id="e-uber",
+        predicate="headquarters",
+        value_text="1515 3rd Street, San Francisco, California",
+        value_type=ValueType.TEXT,
+        time_text="2023",
+        scope="company",
+        source_quote="1515 3rd Street, San Francisco, California.",
+        source_page_start=2,
+        source_page_end=2,
+    )
+
+    is_conclusive, classification, ctx = comparator.compare(fact_a, fact_b, entity, entity)
+    assert is_conclusive is True
+    assert classification is not None
+    assert classification.relationship_type == RelationshipType.CORROBORATES
+
+
+def test_differing_text_values_not_deterministic_contradiction():
+    """Non-numeric text values that differ must not deterministically contradict; they defer to LLM."""
+    comparator = DeterministicComparator()
+    entity = EntitySchema(id="e-uber", canonical_name="Uber Technologies, Inc.", entity_type=EntityType.ORGANIZATION)
+
+    fact_a = FactSchema(
+        id="f-addr-5",
+        document_id="d-1",
+        chunk_id="c-1",
+        subject="Uber Technologies, Inc.",
+        entity_id="e-uber",
+        predicate="headquarters",
+        value_text="San Francisco, CA",
+        value_type=ValueType.TEXT,
+        time_text="2023",
+        scope="company",
+        source_quote="San Francisco, CA.",
+        source_page_start=1,
+        source_page_end=1,
+    )
+    fact_b = FactSchema(
+        id="f-addr-6",
+        document_id="d-2",
+        chunk_id="c-2",
+        subject="Uber Technologies, Inc.",
+        entity_id="e-uber",
+        predicate="headquarters",
+        value_text="Austin, TX",
+        value_type=ValueType.TEXT,
+        time_text="2023",
+        scope="company",
+        source_quote="Austin, TX.",
+        source_page_start=2,
+        source_page_end=2,
+    )
+
+    is_conclusive, classification, ctx = comparator.compare(fact_a, fact_b, entity, entity)
+    # Must NOT deterministically contradict; defer to semantic LLM evaluation
+    assert is_conclusive is False
+    assert classification is None
+

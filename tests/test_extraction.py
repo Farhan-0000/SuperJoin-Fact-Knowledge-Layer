@@ -374,3 +374,15 @@ def test_api_facts_query_and_filtering(client: TestClient, sample_pdf_bytes: byt
     # 5. Nonexistent fact 404
     res_404 = client.get("/api/facts/nonexistent-fact-uuid")
     assert res_404.status_code == 404
+
+
+def test_extraction_service_offline_fallback(monkeypatch: pytest.MonkeyPatch):
+    """Verify ExtractionService automatically falls back to MockExtractionProvider without API key."""
+    from app.config import get_settings
+    from app.services.extraction.service import ExtractionService, MockExtractionProvider
+
+    monkeypatch.setattr(get_settings(), "openai_api_key", "")
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "")
+    service = ExtractionService()
+    assert isinstance(service.provider, MockExtractionProvider)
+

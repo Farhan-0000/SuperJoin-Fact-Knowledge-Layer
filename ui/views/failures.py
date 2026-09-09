@@ -8,7 +8,7 @@ from ui.data_service import get_data_service
 
 
 def render_failures_view() -> None:
-    """Render audit view for rejected claims, validation warnings, and uncertain relationships."""
+    """Render audit view for rejected claims, validation warnings, uncertain relationships, and low-quality pages."""
     st.title("⚠️ Failures & Uncertainty")
     st.markdown("Audit system boundaries, hallucination rejections, quote verifier warnings, and ambiguous relationships.")
 
@@ -18,6 +18,7 @@ def render_failures_view() -> None:
     warning_facts = service.get_warning_facts()
     uncertain_rels = service.get_uncertain_relationships()
     failed_jobs = service.get_failed_jobs()
+    low_quality_pages = service.get_low_quality_pages()
 
     # ── Tabs ───────────────────────────────────────────────────────────
     tab_labels = [
@@ -25,9 +26,10 @@ def render_failures_view() -> None:
         f"Validation Warnings ({len(warning_facts)})",
         f"Uncertain Relationships ({len(uncertain_rels)})",
         f"Failed Jobs ({len(failed_jobs)})",
+        f"Low Quality Pages ({len(low_quality_pages)})",
     ]
 
-    tab1, tab2, tab3, tab4 = st.tabs(tab_labels)
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_labels)
 
     # ── Tab 1: Rejected Facts ──────────────────────────────────────────
     with tab1:
@@ -105,3 +107,33 @@ def render_failures_view() -> None:
                 st.error(f"**Job ID:** `{fj.get('id')}` &bull; Stage: `{fj.get('current_stage')}`")
                 st.code(fj.get("error_message") or "Unknown error", language="text")
                 st.caption(f"Created: {format_local_timestamp(fj.get('created_at'))}")
+
+    # ── Tab 5: Low Quality Pages ───────────────────────────────────────
+    with tab5:
+        st.subheader("Scanned Pages & Low Text Quality Flagged for OCR")
+        st.caption(
+            "Pages identified during parsing with text quality score < 0.30 or flagged as scanned documents. "
+            "These require OCR fallback preprocessing or manual inspection to prevent extraction failures."
+        )
+
+        if not low_quality_pages:
+            st.success("✓ No low-quality or scanned pages detected across indexed documents.")
+        else:
+            for lqp in low_quality_pages:
+                with st.container():
+                    quality_score = lqp.get("text_quality")
+                    qual_pct = int(quality_score * 100) if quality_score is not None else 0
+                    is_scanned = bool(lqp.get("is_scanned"))
+                    status_badge = "SCANNED PAGE" if is_scanned else f"LOW QUALITY ({qual_pct}%)"
+
+                    st.markdown(
+                        f"<div style='border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; background: #f8fafc; margin-bottom: 12px;'>"
+                        f"<div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;'>"
+                        f"<span style='font-size: 14px; font-weight: 700; color: #1e293b;'>Page {lqp.get('page_number')} &bull; {lqp.get('document_name', lqp.get('document_id'))}</span>"
+                        f"<span style='font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; background: #fee2e2; color: #991b1b;'>{status_badge}</span>"
+                        f"</div>"
+                        f"<div style='font-size: 12.5px; color: #64748b;'>Extracted Characters: {lqp.get('raw_len', 0)} | Quality Metric: {qual_pct}%</div>"
+                        f"<div style='font-size: 12px; color: #b45309; margin-top: 6px;'><strong>Recommendation:</strong> Flagged for optical character recognition (OCR) fallback preprocessing.</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )

@@ -34,6 +34,79 @@ def _is_quarter(text: Optional[str]) -> bool:
     return bool(re.search(r"\bq[1-4]\b|fourth\s*quarter|first\s*quarter|second\s*quarter|third\s*quarter", text.lower()))
 
 
+_TEXT_ABBREVIATIONS = {
+    # US States & Territories
+    "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas",
+    "ca": "california", "co": "colorado", "ct": "connecticut", "de": "delaware",
+    "dc": "district of columbia", "fl": "florida", "ga": "georgia", "hi": "hawaii",
+    "id": "idaho", "il": "illinois", "in": "indiana", "ia": "iowa",
+    "ks": "kansas", "ky": "kentucky", "la": "louisiana", "me": "maine",
+    "md": "maryland", "ma": "massachusetts", "mi": "michigan", "mn": "minnesota",
+    "ms": "mississippi", "mo": "missouri", "mt": "montana", "ne": "nebraska",
+    "nv": "nevada", "nh": "new hampshire", "nj": "new jersey", "nm": "new mexico",
+    "ny": "new york", "nc": "north carolina", "nd": "north dakota", "oh": "ohio",
+    "ok": "oklahoma", "or": "oregon", "pa": "pennsylvania", "ri": "rhode island",
+    "sc": "south carolina", "sd": "south dakota", "tn": "tennessee", "tx": "texas",
+    "ut": "utah", "vt": "vermont", "va": "virginia", "wa": "washington",
+    "wv": "west virginia", "wi": "wisconsin", "wy": "wyoming",
+    # Street / Address terms
+    "st": "street", "ave": "avenue", "aven": "avenue", "blvd": "boulevard",
+    "rd": "road", "dr": "drive", "ln": "lane", "ct": "court", "pl": "place",
+    "sq": "square", "pkwy": "parkway", "ste": "suite", "apt": "apartment",
+    "fl": "floor", "bldg": "building", "dept": "department",
+    # Country abbreviations
+    "usa": "united states", "us": "united states", "uk": "united kingdom",
+}
+
+_IGNORABLE_TOKENS = {
+    "united", "states", "usa", "us", "hq", "headquarters", "office", "offices",
+    "state", "of", "the", "inc", "corp", "corporation", "llc", "ltd"
+}
+
+
+def _normalize_text_tokens(text: str) -> list[str]:
+    cleaned = re.sub(r"[^\w\s]", " ", text.lower())
+    tokens = cleaned.split()
+    normalized: list[str] = []
+    for t in tokens:
+        expanded = _TEXT_ABBREVIATIONS.get(t, t)
+        normalized.extend(expanded.split())
+    return normalized
+
+
+def _are_text_values_equivalent(text_a: Optional[str], text_b: Optional[str]) -> bool:
+    """Checks if two textual values (e.g. addresses, locations) are semantically equivalent
+
+    taking into account case, punctuation, standard abbreviations, and filler tokens.
+    """
+    if not text_a or not text_b:
+        return False
+    norm_a = text_a.strip().lower()
+    norm_b = text_b.strip().lower()
+    if norm_a == norm_b:
+        return True
+
+    tokens_a = _normalize_text_tokens(norm_a)
+    tokens_b = _normalize_text_tokens(norm_b)
+    if not tokens_a or not tokens_b:
+        return False
+
+    if tokens_a == tokens_b:
+        return True
+
+    set_a = set(tokens_a)
+    set_b = set(tokens_b)
+    if set_a == set_b:
+        return True
+
+    # Check if difference consists solely of ignorable/filler tokens
+    diff = set_a.symmetric_difference(set_b)
+    if diff and diff.issubset(_IGNORABLE_TOKENS):
+        return True
+
+    return False
+
+
 class DeterministicComparator:
     """Compares two facts across 9 structured dimensions and determines whether
 
@@ -240,14 +313,15 @@ class DeterministicComparator:
         val_a = fact_a.normalized_numeric_value
         val_b = fact_b.normalized_numeric_value
         values_equal = False
+        is_numeric_comparison = (val_a is not None and val_b is not None)
 
-        if val_a is not None and val_b is not None:
+        if is_numeric_comparison:
             denom = max(abs(val_a), abs(val_b), 1e-6)
             rel_diff = abs(val_a - val_b) / denom
             context["relative_value_difference"] = round(rel_diff, 4)
             if rel_diff <= 0.005:  # within 0.5% tolerance
                 values_equal = True
-        elif fact_a.value_text.strip().lower() == fact_b.value_text.strip().lower():
+        elif _are_text_values_equivalent(fact_a.value_text, fact_b.value_text):
             values_equal = True
 
         context["values_equal"] = values_equal
@@ -278,6 +352,7 @@ class DeterministicComparator:
                 currency_explicitly_compatible
                 and scope_explicitly_compatible
                 and geo_explicitly_compatible
+                and is_numeric_comparison
             ):
                 # Direct Contradiction! Same entity, predicate, units, period, scope, geo, but differing values!
                 return True, LLMRelationshipClassification(

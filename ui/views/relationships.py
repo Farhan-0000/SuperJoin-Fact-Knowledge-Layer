@@ -260,8 +260,52 @@ def render_relationships_view() -> None:
 
         context_comp = active_rel.get("context_comp") or []
 
-        # If no explicit comparison json is saved, synthesize standard 6 dimensions
-        if not context_comp:
+        # Convert dictionary context_comp (from real RelationshipEngine) into standard comparison rows
+        if isinstance(context_comp, dict):
+            c = context_comp
+            unit_val_a = c.get("unit_a") or c.get("currency_a") or active_rel.get("fa_unit") or "-"
+            unit_val_b = c.get("unit_b") or c.get("currency_b") or active_rel.get("fb_unit") or "-"
+            unit_match = bool(c.get("unit_match") if c.get("unit_match") is not None else c.get("currency_match", False))
+
+            context_comp = [
+                {
+                    "dimension": "Entity",
+                    "fact_a": c.get("entity_a") or fa_subj,
+                    "fact_b": c.get("entity_b") or fb_subj,
+                    "match": bool(c.get("entity_match", False)),
+                },
+                {
+                    "dimension": "Metric",
+                    "fact_a": c.get("predicate_a") or fa_pred,
+                    "fact_b": c.get("predicate_b") or fb_pred,
+                    "match": bool(c.get("predicate_match", False)),
+                },
+                {
+                    "dimension": "Time Period",
+                    "fact_a": c.get("period_a") or fa_time,
+                    "fact_b": c.get("period_b") or fb_time,
+                    "match": bool(c.get("period_match", False)),
+                },
+                {
+                    "dimension": "Geography",
+                    "fact_a": c.get("geography_a") or active_rel.get("fa_geography") or "Global",
+                    "fact_b": c.get("geography_b") or active_rel.get("fb_geography") or "Global",
+                    "match": bool(c.get("geography_match", True)),
+                },
+                {
+                    "dimension": "Unit / Currency",
+                    "fact_a": unit_val_a,
+                    "fact_b": unit_val_b,
+                    "match": unit_match,
+                },
+                {
+                    "dimension": "Scope",
+                    "fact_a": c.get("scope_a") or fa_scope,
+                    "fact_b": c.get("scope_b") or fb_scope,
+                    "match": bool(c.get("scope_match", False)),
+                },
+            ]
+        elif not isinstance(context_comp, list) or not context_comp:
             same_entity = (fa_subj.lower() == fb_subj.lower())
             same_pred = (fa_pred.lower() == fb_pred.lower())
             same_time = (fa_time.lower() == fb_time.lower()) and fa_time != "N/A"
@@ -280,6 +324,8 @@ def render_relationships_view() -> None:
         # Render Table
         rows_html = ""
         for item in context_comp:
+            if not isinstance(item, dict):
+                continue
             dim_name = item.get("dimension", "")
             val_a = item.get("fact_a") or "-"
             val_b = item.get("fact_b") or "-"

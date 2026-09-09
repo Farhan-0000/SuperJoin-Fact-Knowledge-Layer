@@ -133,7 +133,13 @@ class ExtractionService:
         max_concurrency: Optional[int] = None,
     ):
         settings = get_settings()
-        self.provider = provider or OpenAIExtractionProvider()
+        if provider is not None:
+            self.provider = provider
+        elif settings.effective_api_key and not settings.effective_api_key.startswith("sk-test-"):
+            self.provider = OpenAIExtractionProvider()
+        else:
+            self.provider = MockExtractionProvider()
+
         self.prompt_version = prompt_version
         self.model = settings.resolved_extraction_model
         concurrency = max_concurrency or settings.resolved_max_llm_concurrency
