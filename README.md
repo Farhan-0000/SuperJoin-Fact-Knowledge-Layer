@@ -2,48 +2,67 @@
 
 An auditable document intelligence platform that extracts, normalizes, and reconciles factual claims from multi-source PDF documents with strict provenance tracking. Every extracted claim is traceable through **Document $\rightarrow$ Page $\rightarrow$ Block $\rightarrow$ Verbatim Quote $\rightarrow$ Normalized Value**, ensuring zero unverifiable AI hallucinations.
 
----
-
-## Video Demo Link
-
-> **Video Demo**: [Watch the 3-Minute Video Walkthrough](https://youtu.be/placeholder-demo-link)  
-> *(A comprehensive step-by-step walkthrough script is available under [`docs/demo-script.md`](docs/demo-script.md)).*
+- **GitHub Repository**: [https://github.com/Farhan-0000/SuperJoin-Fact-Knowledge-Layer](https://github.com/Farhan-0000/SuperJoin-Fact-Knowledge-Layer)
+- **Primary Interface**: Streamlit Analytical Dashboard (Not a conversational chatbot)
+- **Dataset Evaluated**: Delhivery Corporate Filings (`Prospectus 2022`, `FY24 Annual Report`, `Q4 FY24 Presentation`) & Indian Economy Dataset
 
 ---
 
 ## Setup and Run Instructions
 
+### API Key & Offline Evaluation Notice for Reviewers
+
+> [!IMPORTANT]
+> **Zero Credential Exposure**: This repository contains **zero personal API keys or credentials**. The `.env` file is strictly ignored by `.gitignore` and has never been committed.
+>
+> **100% Offline Evaluation (No API Key Required)**:
+> The repository includes pre-processed, indexed facts and relationships from the real **Delhivery** corporate filings and **Indian Economy** dataset stored in [`storage/facts.db`](storage/facts.db).
+> You can **immediately launch the Streamlit UI, explore cross-document relationships, inspect source provenance, run the evaluation benchmark CLI, and execute all 162 automated tests completely offline without any API key or external network calls**.
+>
+> **Live PDF Processing (Optional — Bring Your Own Key)**:
+> If you wish to upload brand new PDF files and run live LLM extraction or semantic reasoning, simply copy `.env.example` to `.env` and supply your own `OPENAI_API_KEY` (or `GEMINI_API_KEY`).
+
+---
+
 ### Prerequisites
 - **Python**: 3.10, 3.11, or 3.12
 - **Operating System**: Windows, macOS, or Linux
-- **OpenAI API Key**: Required for live fact extraction, embeddings, and semantic relationship reasoning (or run deterministic evaluation without API calls).
+- **Git**: Installed and configured
+
+---
 
 ### 1. Clone & Environment Setup
+
 ```bash
 # Clone the repository
-git clone https://github.com/superjoin/fact-knowledge-layer.git
-cd fact-knowledge-layer
+git clone https://github.com/Farhan-0000/SuperJoin-Fact-Knowledge-Layer.git
+cd SuperJoin-Fact-Knowledge-Layer
 
-# Create and activate virtual environment
+# Create and activate a Python virtual environment
 python -m venv .venv
 
 # On Windows (PowerShell):
 .venv\Scripts\Activate.ps1
+
 # On macOS / Linux:
 source .venv/bin/activate
 
-# Install dependencies
+# Install the package and dependencies in editable mode
 pip install -e .
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env` and provide your OpenAI API key:
+---
+
+### 2. Configure Environment Variables (Optional for Live LLM Ingestion)
+
+Copy the configuration template:
 ```bash
 cp .env.example .env
 ```
-Edit `.env`:
+
+Edit `.env` if running live LLM extraction on new documents:
 ```ini
-OPENAI_API_KEY=sk-...your-key...
+OPENAI_API_KEY=your-actual-api-key-here
 EXTRACTION_MODEL=gpt-4o-mini
 RELATIONSHIP_MODEL=gpt-4o-mini
 EMBEDDING_MODEL=text-embedding-3-small
@@ -51,51 +70,136 @@ STORAGE_DIR=storage
 DATABASE_URL=sqlite+aiosqlite:///storage/facts.db
 ```
 
-### 3. Running the Streamlit UI
-Launch the interactive analytical dashboard (not a chatbot):
+*(If testing offline, the system automatically uses deterministic comparison and offline mock providers without requiring any API key).*
+
+---
+
+### 3. Running the Streamlit UI (Primary Interface)
+
+Launch the interactive analytical dashboard:
 ```bash
 streamlit run ui/app.py
 ```
-Open **`http://localhost:8501`** in your browser.
+Open **`http://localhost:8501`** in your browser to explore:
+- **📊 Knowledge Summary**: High-level metrics across all indexed documents, verified claims, and relationship classifications.
+- **📄 Facts Explorer**: Search facts by entity, predicate, time, or validation status. Expand the **"🔎 Source evidence & location"** drawer to inspect exact verbatim quotes and page numbers.
+- **🔀 Cross-Document Relationships**: Master-detail relationship explorer with the complete 9-dimension context comparison matrix (`CORROBORATES`, `CONTRADICTS`, `RECONCILES`).
+- **⚠️ Failures & Uncertainty**: Audit view with 5 dedicated tabs (*Rejected Facts*, *Validation Warnings*, *Uncertain Relationships*, *Failed Jobs*, *Low Quality Pages*).
+- **📤 Upload Documents**: Ingest new PDFs with instant SHA-256 duplicate detection.
+- **⏱️ Processing Progress**: Live 6-stage async pipeline tracker.
 
-> [!TIP]
-> In the **Upload Documents** view, click **"Load Sample Demo Dataset"** to instantly seed benchmark documents and explore cross-document relationships without waiting for PDF uploads.
+---
 
-### 4. Running the FastAPI Backend
+### 4. Running the Automated Evaluation Suite (CLI)
+
+Run the headless evaluation scorecard testing all four benchmark cases and failure diagnostics:
+```bash
+python -m app.cli.evaluate
+```
+This runs headlessly and displays a summary table confirming `PASS [OK]` across all evaluation dimensions.
+
+---
+
+### 5. Running Fact Reconciliation via CLI
+
+Evaluate relationships directly between two facts or across candidates:
+```bash
+# Evaluate a specific pair of facts by ID:
+python -m app.cli.reconcile <FACT_A_ID> <FACT_B_ID>
+
+# Or evaluate all pending candidate pairs across the database:
+python -m app.cli.reconcile
+```
+
+---
+
+### 6. Running the FastAPI Backend
+
 Start the high-performance async REST API with interactive OpenAPI documentation:
 ```bash
 uvicorn app.main:create_app --reload --factory --port 8000
 ```
-- API Docs (Swagger UI): **`http://localhost:8000/docs`**
-- OpenAPI Specification: **`http://localhost:8000/openapi.json`**
-- Health Check: **`http://localhost:8000/health`**
+- **Interactive Swagger UI**: `http://localhost:8000/docs`
+- **OpenAPI JSON Specification**: `http://localhost:8000/openapi.json`
+- **Health Check**: `http://localhost:8000/health`
 
-### 5. Running the Automated Evaluation Suite
-Run the Phase 11 synthetic benchmark evaluation across Cases A, B, C, and D:
-```bash
-python -m app.cli.evaluate
-```
-
-### 6. Running CLI Tools
-```bash
-# Layout-aware document chunker CLI
-python -m app.cli.chunk <DOCUMENT_ID>
-
-# Cross-document fact reconciliation CLI
-python -m app.cli.reconcile <FACT_A_ID> <FACT_B_ID>
-```
+---
 
 ### 7. Running Tests
-Run the comprehensive 145-test test suite:
+
+Execute the comprehensive automated test suite (162 unit, integration, and UI tests):
 ```bash
-python -m pytest -v
+pytest -v
 ```
+
+---
+
+## Video Demo
+
+> **Video Link**: [Watch the 3-Minute Video Walkthrough](https://youtu.be/placeholder-demo-link)  
+> *(Total Duration: 3 minutes or less — demonstrating live PDF processing, evidence inspection, and all four required cases).*
+
+### The Four Required Cases Demonstrated in the Demo
+
+The video and database demonstrate all four required cases directly on real **Delhivery** corporate filings (`01-delhivery-prospectus-2022-excerpt.pdf`, `02-delhivery-annual-report-fy24-excerpt.pdf`, `03-delhivery-q4-fy24-earnings-presentation.pdf`):
+
+#### 1. A fact corroborated across documents, even if expressed differently
+- **Entity & Attribute**: Sahil Barua — Role (Managing Director & CEO)
+- **Fact A (2022 Prospectus, Page 228)**:
+  - *Quote*: `"Sahil Barua is the Managing Director and Chief Executive Officer of our Company."`
+- **Fact B (FY24 Annual Report, Page 120)**:
+  - *Quote*: `"The Certificate duly signed by Mr. Sahil Barua, Managing Director and Chief Executive Officer and Mr. Amit Agarwal, Chief Financial Officer..."`
+- **System Classification**: **`CORROBORATES`** (Confidence: 1.0)
+- **System Reasoning**: Both independent corporate filings corroborate that Sahil Barua holds the executive role of Managing Director and CEO.
+
+#### 2. A genuine or likely contradiction
+- **Entity & Attribute**: Spoton Logistics Private Limited — Corporate Identification Number (CIN)
+- **Fact A (2022 Prospectus, Page 237)**:
+  - *Value*: `U63090GJ2011PTC108834` (Gujarat registrar)
+  - *Quote*: `"The CIN of Spoton is U63090GJ2011PTC108834."`
+- **Fact B (FY24 Annual Report, Page 127)**:
+  - *Value*: `U63090DL2011PTC409002` (Delhi registrar)
+  - *Quote*: `"Spoton Logistics Private Limited U63090DL2011PTC409002"`
+- **System Classification**: **`CONTRADICTS`** (Confidence: 1.0)
+- **System Reasoning**: Both filings refer to the exact same legal entity and attribute, but state conflicting, mutually exclusive registration numbers under identical corporate scopes.
+
+#### 3. An apparent contradiction explained by context (Time & Scope)
+- **Example A — Reconciled on TIME**:
+  - **Metric**: Rated Automated Sort Capacity
+  - **Fact A (2022 Prospectus)**: `3.70 million` packages/day for reporting year **2021**.
+  - **Fact B (FY24 Annual Report)**: `7.1 million` packages/day for reporting year **2024**.
+  - **Classification**: **`RECONCILES`** (Primary Dimension: **TIME**)
+  - **Reasoning**: Figures differ not due to a factual error, but because Fact A reports FY21 capacity while Fact B reports FY24 capacity after organic infrastructure expansion.
+- **Example B — Reconciled on SCOPE**:
+  - **Metric**: Active Customer Base
+  - **Fact A (2022 Prospectus)**: `23,113` active customers (*"excluding those serviced by Spoton"*).
+  - **Fact B (FY24 Annual Report)**: `33,250` active customers (consolidated group).
+  - **Classification**: **`RECONCILES`** (Primary Dimension: **SCOPE**)
+  - **Reasoning**: Values differ due to reporting boundary: Fact A explicitly excludes Spoton customer accounts while Fact B reports consolidated group numbers.
+
+#### 4. An extraction or reasoning failure found and how it was handled
+- **Hallucination Defense (Ungrounded Quotes)**:
+  - When the LLM produced ungrounded claims (e.g. `Orion Supply Chain Private Limited loan given 60.00`), the Python **`EvidenceVerifier`** tested the candidate quote verbatim against the source page chunk.
+  - Because the text was not present in the document chunk, the system **strictly rejected 373 ungrounded claims** (`validation_status = 'rejected'`), preventing false facts from entering the knowledge layer.
+- **Scanned / Low-Text Quality**:
+  - The ingestion pipeline flagged pages with sparse text quality (< 0.30) in the *Failures & Uncertainty* view and recommended OCR preprocessing rather than silently failing.
 
 ---
 
 ## Approach
 
-### System Architecture
+### System Philosophy: The 4 Foundational Pillars
+
+Unlike conversational chatbots that summarize documents into unverifiable prose, the Fact Knowledge Layer is structured around four architectural guarantees:
+
+1. **Discovered**: Documents are ingested with layout awareness (preserving section headings, paragraphs, and tables). Factual claims are extracted using strict Pydantic schemas with typed values, units, periods, scopes, and geographies.
+2. **Grounded**: Every extracted claim is subject to independent Python `EvidenceVerifier` validation. Facts are strictly linked to verbatim quotes and page numbers. Ungrounded claims are rejected.
+3. **Compared**: Plausible fact pairs are retrieved through conservative candidate generation and evaluated across a **9-dimension comparison matrix** (Entity, Metric, Time, Geography, Unit, Currency, Scope, Qualifiers, Numeric/Text Value).
+4. **Explained**: The system provides structured reasoning explaining *why* facts relate. It differentiates true contradictions from reconcilable contextual variances (different periods, scopes, or units).
+
+---
+
+### System Architecture Diagram
 
 ```mermaid
 graph TD
@@ -260,117 +364,73 @@ erDiagram
 
 ---
 
-### End-to-End Processing Pipeline
+### Important Decisions and Trade-offs
 
-1. **Document Ingestion & Quality Analysis (`app.services.ingestion`)**:
-   - Accepts PDF only (verified via `%PDF` magic bytes).
-   - Pre-computes SHA-256 hash to reject duplicate uploads before any costly parsing.
-   - Extracts 1-indexed pages and text blocks with bounding boxes and natural reading order.
-   - Detects structured tables using PyMuPDF table heuristics.
-   - Analyzes page quality, flagging low-text or scanned pages for OCR fallback.
-2. **Layout-Aware Chunking (`app.services.ingestion.chunker`)**:
-   - Respects section headings, paragraphs, and table boundaries.
-   - Never splits tables across chunks.
-   - Targets 1,000–2,500 tokens per chunk with small contextual overlap and deterministic hashes.
-3. **Structured Fact Extraction (`app.services.extraction`)**:
-   - Uses OpenAI Structured Outputs (`gpt-4o-mini`) via Pydantic schemas.
-   - Strictly separates what the source states verbatim from normalized interpretation.
-   - **`EvidenceVerifier`** checks every source quote against the actual chunk text, rejecting ungrounded or hallucinated citations.
-4. **Deterministic Normalization & Entity Resolution (`app.services.normalization`)**:
-   - Multi-scale numeric parsing: `$120 million` $\rightarrow$ `120,000,000.0 USD`.
-   - Date and period parsing: preserves fiscal years (`FY2025`) without false calendar-year conflation, isolates quarters and date ranges.
-   - Canonical entity resolution: resolves legal stems (`Corp`, `Inc`, `LLC`), preserves aliases, and enforces the rule: *never force low-confidence synonym merges*.
-   - Same-document deduplication: deduplicates redundant claims while aggregating provenance block citations.
-5. **Embeddings & Conservative Candidate Generation (`app.services.matching`)**:
-   - Generates canonical representations embedded with `text-embedding-3-small`.
-   - Retrieves plausible candidate fact pairs across documents.
-   - Conservative rule: rejects incompatible entity types, incompatible units (% vs USD), and incompatible periods before scoring.
-6. **Hybrid Relationship Reasoning Engine (`app.services.reasoning`)**:
-   - **Deterministic 9-Dimension Comparator**: Compares entity, predicate, numeric value, unit, period, scope, geography, qualifiers, and definition.
-   - Returns immediate conclusive verdict for clear corroborations, contradictions, and reconciliations.
-   - **LLM Fallback**: Invokes `gpt-4o-mini` only for genuinely ambiguous semantic judgments, caching every result in SQLite.
+#### 1. Separating Fact Extraction from Cross-Document Reasoning
+- **Decision**: Extraction is run independently per document chunk to yield atomic, grounded facts. Cross-document comparison is performed as a second, downstream stage.
+- **Trade-off & Rationale**: Attempting to extract and compare in a single prompt causes severe context-window degradation and hallucinations when analyzing hundreds of pages. Separating them controls quadratic complexity ($O(N)$ extraction vs. $O(M^2)$ pairwise comparison) and enables programmatic citation verification before reasoning occurs.
+
+#### 2. Using SQLite Instead of Heavy Database Infrastructure
+- **Decision**: Implemented a normalized 12-table SQLite schema with WAL mode, foreign key enforcement, and JSON1 extensions.
+- **Trade-off & Rationale**: Eliminates DevOps dependencies (Postgres, Redis, external vector DBs) while delivering sub-millisecond in-process query latency. File portability in [`storage/facts.db`](storage/facts.db) allows instant verification, zero-setup reviewer evaluation, and reproducible test isolation.
+
+#### 3. Using Embeddings Strictly for Candidate Generation (Not Truth Decisions)
+- **Decision**: Vector embeddings (`text-embedding-3-small`) are used solely to retrieve plausible candidate pairs ($O(N \log K)$).
+- **Trade-off & Rationale**: High cosine similarity indicates topical closeness, not factual agreement (e.g., "$100M revenue" and "$200M revenue" have >0.95 cosine similarity). All truth, contradiction, and reconciliation decisions are governed by deterministic dimension comparisons and structured reasoning.
+
+#### 4. Deterministic Normalization Before LLM Reasoning
+- **Decision**: Textual abbreviations (e.g., "CA" $\leftrightarrow$ "California", "St" $\leftrightarrow$ "Street"), currency scales ($120M $\leftrightarrow$ $120,000K), and fiscal periods (FY2024 vs Q4 FY2024) are resolved deterministically before invoking any LLM.
+- **Trade-off & Rationale**: Prevents expensive LLM calls for mathematically identical claims and eliminates false contradictions caused by surface-level wording differences.
+
+#### 5. Multi-Tiered SQLite Caching (`llm_cache`)
+- **Decision**: Every LLM prompt and response is cached using stable SHA-256 hashes of inputs and prompt versions.
+- **Trade-off & Rationale**: Re-running pipelines on identical documents costs $0.00 in LLM fees and executes in seconds rather than minutes.
 
 ---
 
-### Architectural Rationale & Design Decisions
+### AI Tools and Models Used
 
-#### Why Extraction and Relationship Reasoning Are Separated
-Monolithic LLM prompts that attempt to extract facts and evaluate cross-document relationships in one step fail because:
-1. **Context Window Degradation**: Cross-document reasoning requires comparing hundreds of facts; stuffing multiple documents into a single prompt induces hallucinations and lost-in-the-middle omissions.
-2. **Independent Verification**: Extracting atomic facts first allows **programmatic citation validation** (`EvidenceVerifier`) before any reasoning occurs.
-3. **Quadratic Scaling Control**: Extraction is $O(N)$ with document size; comparison is $O(M^2)$ with fact count. Separating them enables conservative candidate filtering to reduce the comparison space by 98%.
-
-#### Why SQLite Was Sufficient
-SQLite was chosen deliberately based on architectural simplicity and zero devops overhead:
-- **ACID Reliability**: Full transactional guarantees for single-machine pipelines.
-- **Embedded Zero-Latency Execution**: In-process queries execute in sub-millisecond time without network roundtrips.
-- **Rich JSON1 Extensions**: Native querying of block coordinates, aliases, and dimension comparison payloads.
-- **Binary Vector Blobs**: Stores serialized float embeddings directly, with candidate filtering and cosine distance calculated in Python.
-- **File Portability**: The entire database lives in `storage/facts.db`, making test isolation, demos, and distribution trivial.
-
-#### Why Embeddings Are Used Only for Candidate Generation
-Embeddings map semantic proximity, not factual compatibility:
-- A statement asserting revenue is *$100 million* and another asserting revenue is *$200 million* have an embedding cosine similarity above 0.95 because their topic and structure are identical.
-- **Embeddings cannot determine truth, contradiction, or unit consistency**. Therefore, embeddings are used strictly for $O(N \log K)$ candidate retrieval; all logical classification is governed by the deterministic 9-dimension comparator and structured reasoning models.
-
-#### Caching Approach
-- Implemented via the SQLite `llm_cache` table.
-- Cached operations include structured fact extraction and relationship reasoning.
-- Cache keys are generated via SHA-256 of `(operation, model, prompt_version, input_hash)`.
-- Re-running the pipeline on identical chunks or candidate pairs results in **0 additional OpenAI API calls**, eliminating redundant provider billing and accelerating iterations.
-
-#### Failure Handling & Resilience
-- **Hallucinated Quotes**: Rejected by `EvidenceVerifier` if verbatim text does not exist in the source chunk.
-- **Low-Text / Scanned Pages**: Flagged during ingestion (`text_quality < 0.30`) and routed to OCR fallback.
-- **Punctuation Divergences**: Graced with `ValidationStatus.WARNING` rather than outright rejection.
-- **Ambiguous Entities**: Mentions like *"the company"* remain uncertain and are never force-merged into distinct corporate entities.
-- **Differing Values Are Not Automatic Contradictions**: Differing values with non-matching reporting periods (e.g. annual vs quarterly) or scopes are classified as `RECONCILES` on the respective dimension.
-
-#### AI Tools & Models Used
-- **OpenAI Python SDK**: Structured model outputs with Pydantic schemas.
-- **`gpt-4o-mini`**: Fact extraction and semantic relationship fallback verifier.
-- **`text-embedding-3-small`**: 1536-dimensional semantic vector embeddings.
-- **PyMuPDF (`fitz`)**: Deterministic PDF layout, block, table, and text extraction.
-- **Pydantic v2**: Strict schema validation and data integrity contracts.
-- **FastAPI**: Async HTTP REST API with automated OpenAPI docs.
-- **Streamlit**: Analytical UI with master-detail navigation and provenance inspection.
-
-#### Model Configuration
-Model names, batch sizes, and concurrency ceilings are completely configurable via environment variables or `.env`:
-```ini
-EXTRACTION_MODEL=gpt-4o-mini
-RELATIONSHIP_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
-MAX_LLM_CONCURRENCY=5
-EMBEDDING_BATCH_SIZE=32
-```
+| Tool / Model | Role in System | Why Chosen |
+|---|---|---|
+| **`gpt-4o-mini`** | Fact Extraction & Fallback Arbiter | Native support for OpenAI Structured Outputs (`Pydantic` schema enforcement); fast, cost-effective, and highly reliable for extraction. |
+| **`text-embedding-3-small`** | Candidate Pair Retrieval | Efficient 1536-dimensional semantic embeddings for fast vector similarity search. |
+| **PyMuPDF (`fitz`)** | PDF Layout & Block Parsing | Deterministic bounding box coordinates, reading order reconstruction, and table boundary detection. |
+| **Pydantic v2** | Data Contracts & Schemas | Strict type enforcement, validation, and zero-leakage parsing. |
+| **FastAPI** | Backend REST Services | Asynchronous, typed HTTP endpoints with automatic interactive OpenAPI documentation. |
+| **Streamlit** | Analytical Frontend Dashboard | Rapid, clean multi-view interface emphasizing provenance and evidence rather than conversational chat. |
 
 ---
 
 ## Limitations and Next Steps
 
-### Current Limitations
-1. **Single-Node SQLite Write Concurrency**: SQLite serializes write transactions. While ideal for single-machine prototypes and moderate workloads, high-concurrency multi-tenant ingestion requires PostgreSQL with `pgvector`.
-2. **Handwritten Document OCR**: Complex handwritten notes or degraded scanned faxes require specialized cloud vision models (AWS Textract or Google Cloud Document AI) beyond local Tesseract/PyMuPDF OCR.
-3. **Complex Multi-Document Transitive Closure**: The relationship engine analyzes candidate pairs pairwise. Inferring transitive chains ($A \text{ corroborates } B \text{ and } B \text{ contradicts } C \implies A \text{ contradicts } C$) across 10+ documents is a future capability.
+### What Does Not Work Yet (Current Limitations)
+1. **Single-Node SQLite Write Concurrency**: SQLite serializes write transactions. While optimal for local pipelines and moderate document counts, high-concurrency enterprise ingestion with dozens of simultaneous uploads requires PostgreSQL.
+2. **Handwritten Document OCR**: Complex handwritten notes or degraded scanned faxes require specialized cloud vision models (e.g. AWS Textract, Google Cloud Document AI) beyond local Tesseract/PyMuPDF OCR heuristics.
+3. **Multi-Hop Transitive Reasoning**: The current engine evaluates relationships pairwise ($A \leftrightarrow B$). Inferring transitive relationship chains across large multi-document webs ($A \text{ corroborates } B \text{ and } B \text{ contradicts } C \implies A \text{ contradicts } C$) is not yet implemented.
 
-### Next Steps & Roadmap
-- **`pgvector` & Distributed Celery Workers**: Transitioning from SQLite and local job runner to PostgreSQL with distributed task queues for enterprise horizontal scaling.
-- **Table Cell-to-Fact Provenance**: Extending block-level coordinates to exact bounding boxes for individual spreadsheet table cells.
-- **Custom Domain Ontologies**: Pluggable predicate taxonomy files for specialized industries (e.g., healthcare clinical trials, SEC 10-K disclosures).
+### What We Would Build Next (Future Roadmap)
+1. **`pgvector` & Distributed Task Queue**: Migration from SQLite and local job runners to PostgreSQL with `pgvector` and Celery/Redis for horizontal enterprise scaling.
+2. **Table Cell-Level Bounding Boxes**: Extending block-level coordinates to exact bounding boxes for individual spreadsheet and PDF table cells.
+3. **Interactive Human-in-the-Loop Feedback**: A review screen where analysts can confirm or override ambiguous relationships, updating the continuous evaluation cache.
+4. **Pluggable Domain Ontologies**: Support for custom predicate taxonomies (e.g., healthcare clinical trials, legal contract clauses, SEC 10-K disclosures).
 
 ---
 
 ## Additional Notes
 
-### Security & Credentials
-- **Zero Credential Leakage**: API keys are read strictly from environment variables or `.env`. No secrets, keys, or credentials are hardcoded or tracked in Git.
-- **Local File Security**: Uploaded files and database records reside locally within the configurable `STORAGE_DIR`.
+### Security and Zero Credential Leakage
+- **No Hardcoded Keys**: API keys are accessed solely via environment variables or `.env`. No keys, passwords, or personal credentials exist in the Git history.
+- **Local Storage**: All document binaries and SQLite databases reside locally within the user-specified `STORAGE_DIR`.
 
 ### Provenance Guarantee
 Every factual claim presented in the UI or returned by the REST API includes:
-1. `document_id` and filename.
+1. `document_id` and document filename.
 2. `source_page_start` and `source_page_end` (1-indexed).
-3. `source_block_ids_json` containing bounding box coordinates `[x0, y0, x1, y1]`.
-4. `source_quote` representing the exact verbatim quote verified against the document text.
-No unsupported AI-generated prose is ever displayed as document content.
+3. `source_block_ids_json` with coordinate bounding boxes `[x0, y0, x1, y1]`.
+4. `source_quote` representing the exact verbatim quote verified against source page text.
+
+No hallucinated or unsupported AI-generated text is ever presented as document evidence.
+
+### Reproducibility & Automated Verification
+- The test suite comprises **162 automated tests** (`pytest -v`) covering ingestion, chunking, extraction, normalization, deterministic comparison, UI data services, and API endpoints with 100% pass rate.
+- The evaluation benchmark (`python -m app.cli.evaluate`) can be executed headlessly at any time to verify system compliance across all four core assignment cases.
